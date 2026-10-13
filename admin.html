@@ -28,6 +28,15 @@
   label{font-size:.82rem; font-weight:600; display:block; margin-bottom:5px;}
   input, select, textarea{width:100%; border:1px solid var(--line); background:#fff; border-radius:4px; padding:10px 12px; font-size:.95rem; font-family:inherit; color:var(--charcoal); margin-bottom:14px;}
   input:focus, select:focus, textarea:focus{outline:none; border-color:var(--accent);}
+  input[type="file"]{
+    -webkit-appearance:none; appearance:none;
+    padding:10px 8px; cursor:pointer; position:relative; z-index:5;
+  }
+  input[type="file"]::-webkit-file-upload-button{
+    -webkit-appearance:button; appearance:button;
+    background:var(--charcoal); color:#fff; border:none; border-radius:4px;
+    padding:8px 14px; font-family:inherit; font-size:.85rem; font-weight:600; cursor:pointer; margin-right:10px;
+  }
   button{font-family:inherit; cursor:pointer; border:none; border-radius:4px; padding:11px 18px; font-size:.9rem; font-weight:600;}
   .btn-primary{background:var(--charcoal); color:#fff; width:100%;}
   .btn-primary:hover{background:var(--wood-deep);}
