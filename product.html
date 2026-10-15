@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fujail Furniture — Product</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ivory:#f7f3ec; --paper:#fffdfa; --charcoal:#26221d; --charcoal-soft:#4a443c;
+    --wood:#a9754f; --wood-deep:#7d5539; --line:#e4dccc; --accent:#8c6a4a;
+    box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ivory:#1b1712; --paper:#221d17; --charcoal:#f3ede2; --charcoal-soft:#cfc4b3; --line:#3a3226; --accent:#c79b6f;
+    }
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html{height:100%;}
+  body{font-family:'Inter',system-ui,sans-serif; background:var(--ivory); color:var(--charcoal); line-height:1.6; -webkit-font-smoothing:antialiased;}
+  h1,.serif{font-family:'Fraunces',Georgia,serif; font-weight:500; letter-spacing:-0.01em;}
+  a{color:inherit; text-decoration:none;}
+  .wrap{max-width:1100px; margin:0 auto; padding:0 24px;}
+  .eyebrow{font-size:.72rem; letter-spacing:.18em; text-transform:uppercase; color:var(--accent); font-weight:600;}
+
+  header{position:sticky; top:0; z-index:50; background:rgba(247,243,236,.86); backdrop-filter:blur(10px); border-bottom:1px solid var(--line); padding-top:env(safe-area-inset-top,0px);}
+  .nav{display:flex; align-items:center; justify-content:space-between; height:76px;}
+  .brand{font-family:'Fraunces',serif; font-size:1.25rem; letter-spacing:.04em;}
+  .brand b{color:var(--wood-deep); font-weight:600;}
+  .back-link{font-size:.85rem; font-weight:600; color:var(--wood-deep);}
+  .cta-btn{display:inline-block; background:var(--charcoal); color:var(--paper); padding:13px 26px; border-radius:2px; font-size:.9rem; font-weight:600; letter-spacing:.02em; border:none; margin-top:24px;}
+
+  main{padding:40px 0 72px;}
+  .product-layout{display:grid; gap:36px;}
+  @media(min-width:860px){ .product-layout{grid-template-columns:1.1fr 1fr; align-items:start;} }
+
+  .main-image{aspect-ratio:4/3.2; border-radius:4px; overflow:hidden; background:linear-gradient(135deg, #cba274 0%, #a9754f 45%, #7d5539 100%); position:relative;}
+  .main-image img{width:100%; height:100%; object-fit:cover; display:block;}
+  .main-image .ph-label{position:absolute; left:0; bottom:0; right:0; font-size:.68rem; letter-spacing:.12em; text-transform:uppercase; color:#fff; padding:14px 16px; background:linear-gradient(0deg, rgba(0,0,0,.4), transparent);}
+
+  .thumb-strip{display:flex; gap:10px; margin-top:14px; overflow-x:auto; padding-bottom:4px;}
+  .thumb{flex:0 0 auto; width:72px; height:72px; border-radius:4px; overflow:hidden; cursor:pointer; border:2px solid transparent; opacity:.75; transition:opacity .2s, border-color .2s;}
+  .thumb img{width:100%; height:100%; object-fit:cover; display:block;}
+  .thumb.active{opacity:1; border-color:var(--accent);}
+
+  .product-info h1{font-size:clamp(1.7rem,4vw,2.3rem); margin-top:8px;}
+  .product-info .price-tag{display:inline-block; margin-top:14px; font-size:.82rem; letter-spacing:.04em; text-transform:uppercase; color:var(--accent); font-weight:600;}
+  .product-info p.desc{margin-top:16px; color:var(--charcoal-soft); font-size:1.02rem; max-width:48ch;}
+  .product-info .category-tag{display:inline-block; margin-top:18px; border:1px solid var(--line); padding:7px 14px; border-radius:30px; font-size:.8rem; color:var(--charcoal-soft);}
+
+  .not-found{padding:80px 24px; text-align:center; color:var(--charcoal-soft);}
+
+  footer{background:var(--charcoal); color:var(--ivory); padding:40px 0; text-align:center; font-size:.82rem; margin-top:40px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <a href="index.html" class="brand"><b>FUJAIL</b> FURNITURE</a>
+    <a href="index.html" class="back-link">← Back to Home</a>
+  </div>
+</header>
+
+<main class="wrap" id="mainContent">
+  <p class="eyebrow">Loading…</p>
+</main>
+
+<footer>
+  <div class="wrap">© <span id="year"></span> Fujail Furniture. All rights reserved.</div>
+</footer>
+
+<script>
+document.getElementById('year').textContent = new Date().getFullYear();
+
+const SUPABASE_URL = "https://cixlmdmycwxuvguzsbbh.supabase.co";
+const SUPABASE_KEY = "sb_publishable_7M67DGKa0cpRKCel2IfMGw_uHFjKBO_";
+
+async function fetchTable(table, query) {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+    });
+    if (!res.ok) throw new Error(`${table} fetch failed: ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.error('Supabase fetch error:', err);
+    return [];
+  }
+}
+
+const params = new URLSearchParams(window.location.search);
+const productName = params.get('name') || '';
+const main = document.getElementById('mainContent');
+
+function renderNotFound() {
+  main.innerHTML = `<div class="not-found"><h1 class="serif">Product not found</h1><p>This product may have been removed or renamed. <a href="index.html" style="color:var(--wood-deep); font-weight:600;">Return home</a>.</p></div>`;
+}
+
+function imageBlock(src, label, index) {
+  return src
+    ? `<img src="${src}" alt="${label}">`
+    : `<div class="main-image" style="position:absolute; inset:0;"><span class="ph-label">Placeholder — ${label} image</span></div>`;
+}
+
+async function loadProduct() {
+  if (!productName) { renderNotFound(); return; }
+
+  const products = await fetchTable('Product', `select=*&name=eq.${encodeURIComponent(productName)}&limit=1`);
+  if (!products.length) { renderNotFound(); return; }
+  const product = products[0];
+
+  const extraImages = await fetchTable(
+    'Product_Images',
+    `select=*&product_name=eq.${encodeURIComponent(productName)}&order=display_order.asc.nullslast`
+  );
+
+  // Build the full image list: main product photo first, then any extra photos
+  // (skip the main photo if it's already duplicated inside Product_Images).
+  const images = [];
+  if (product.image_url) images.push(product.image_url);
+  extraImages.forEach(i => {
+    if (i.image_url && !images.includes(i.image_url)) images.push(i.image_url);
+  });
+
+  document.title = `${product.name} — Fujail Furniture`;
+
+  main.innerHTML = `
+    <div class="product-layout">
+      <div>
+        <div class="main-image" id="mainImageBox">
+          ${images.length ? `<img id="mainImageEl" src="${images[0]}" alt="${product.name}">` : `<span class="ph-label">Placeholder — ${product.name} image</span>`}
+        </div>
+        ${images.length > 1 ? `<div class="thumb-strip" id="thumbStrip"></div>` : ''}
+      </div>
+      <div class="product-info">
+        <p class="eyebrow">${product.category || 'Furniture'}</p>
+        <h1 class="serif">${product.name}</h1>
+        ${product.price ? `<div class="price-tag">${product.price}</div>` : ''}
+        <p class="desc">${product.description || ''}</p>
+        ${product.category ? `<div><span class="category-tag">${product.category}</span></div>` : ''}
+        <div><a href="index.html#contact" class="cta-btn">Get a Quote</a></div>
+      </div>
+    </div>
+  `;
+
+  if (images.length > 1) {
+    const strip = document.getElementById('thumbStrip');
+    const mainImageEl = document.getElementById('mainImageEl');
+    images.forEach((src, idx) => {
+      const t = document.createElement('div');
+      t.className = 'thumb' + (idx === 0 ? ' active' : '');
+      t.innerHTML = `<img src="${src}" alt="${product.name} photo ${idx + 1}">`;
+      t.addEventListener('click', () => {
+        mainImageEl.src = src;
+        strip.querySelectorAll('.thumb').forEach(el => el.classList.remove('active'));
+        t.classList.add('active');
+      });
+      strip.appendChild(t);
+    });
+  }
+}
+
+loadProduct();
+</script>
+</body>
+</html>
