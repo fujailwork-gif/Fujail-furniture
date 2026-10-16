@@ -64,6 +64,33 @@
   .card-row .info span{font-size:.8rem; color:var(--charcoal-soft); display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .card-row .actions{display:flex; gap:6px; flex-shrink:0;}
 
+  /* Category dashboard */
+  .cat-grid{display:grid; gap:14px; grid-template-columns:repeat(2,1fr);}
+  @media(min-width:520px){ .cat-grid{grid-template-columns:repeat(3,1fr);} }
+  .cat-card{background:var(--paper); border:1px solid var(--line); border-radius:8px; overflow:hidden; cursor:pointer; text-align:left; padding:0; display:block; width:100%;}
+  .cat-card img{width:100%; aspect-ratio:4/3; object-fit:cover; display:block; background:var(--line);}
+  .cat-card .ph-fallback{width:100%; aspect-ratio:4/3; background:linear-gradient(135deg,#cba274,#7d5539); display:flex; align-items:center; justify-content:center; color:#fff; font-size:1.6rem; font-weight:700;}
+  .cat-card .cat-info{padding:10px 12px;}
+  .cat-card .cat-info strong{display:block; font-size:.95rem;}
+  .cat-card .cat-info span{font-size:.78rem; color:var(--charcoal-soft);}
+  .add-cat-card{background:transparent; border:2px dashed var(--line); border-radius:8px; display:flex; align-items:center; justify-content:center; min-height:160px; color:var(--charcoal-soft); font-weight:600; font-size:.9rem; cursor:pointer;}
+
+  /* Category detail */
+  #catDetail{display:none;}
+  .back-btn{background:none; border:none; color:var(--wood-deep); font-weight:600; font-size:.9rem; padding:8px 0; margin-bottom:10px; display:inline-flex; align-items:center; gap:4px;}
+  .collection-card-box{background:var(--paper); border:1px solid var(--line); border-radius:6px; padding:14px 16px; margin-bottom:18px; display:flex; gap:14px; align-items:center;}
+  .collection-card-box img{width:60px; height:60px; object-fit:cover; border-radius:4px; background:var(--line);}
+  .prod-grid{display:grid; gap:14px; grid-template-columns:repeat(2,1fr);}
+  @media(min-width:640px){ .prod-grid{grid-template-columns:repeat(3,1fr);} }
+  .prod-card{background:var(--paper); border:1px solid var(--line); border-radius:8px; overflow:hidden;}
+  .prod-card img{width:100%; aspect-ratio:4/3; object-fit:cover; display:block; background:var(--line);}
+  .prod-card .ph-fallback{width:100%; aspect-ratio:4/3; background:linear-gradient(135deg,#cba274,#7d5539);}
+  .prod-card .pbody{padding:10px 12px;}
+  .prod-card .pbody strong{display:block; font-size:.9rem;}
+  .prod-card .pbody .price{font-size:.76rem; color:var(--accent); font-weight:600; display:block; margin-top:2px;}
+  .prod-card .pactions{display:flex; gap:6px; padding:0 12px 12px;}
+  .prod-card .pactions button{flex:1; padding:9px 6px; font-size:.78rem;}
+
   .form-box{background:var(--paper); border:1px solid var(--line); border-radius:6px; padding:20px; margin-top:16px;}
   .form-box h3{margin-bottom:14px; font-size:1rem;}
   .form-row{display:grid; gap:12px; grid-template-columns:1fr;}
@@ -110,11 +137,31 @@
 
     <!-- CATALOG PANEL -->
     <div class="panel active" id="panel-catalog">
-      <div class="toolbar">
-        <h2>Collections & Products</h2>
-        <button class="btn-primary btn-small" onclick="openForm('catalog')">+ Add New</button>
+
+      <!-- Dashboard: category cards -->
+      <div id="catDashboard">
+        <div class="toolbar">
+          <h2>Browse by Category</h2>
+        </div>
+        <p class="muted" style="margin-bottom:14px;">Tap a category to see and manage its products.</p>
+        <div class="cat-grid" id="catGrid"></div>
       </div>
-      <div id="catalogList"></div>
+
+      <!-- Category detail: products within one category -->
+      <div id="catDetail">
+        <button class="back-btn" onclick="closeCategory()">← All Categories</button>
+        <h2 id="catDetailTitle"></h2>
+        <p class="muted" id="catDetailCount" style="margin:4px 0 16px;"></p>
+
+        <div id="collectionCardBox"></div>
+
+        <div class="toolbar">
+          <h2 style="font-size:1rem;">Products</h2>
+          <button class="btn-primary btn-small" id="catAddProductBtn">+ Add Product</button>
+        </div>
+        <div class="prod-grid" id="catProductGrid"></div>
+        <p class="empty-note" id="catProductEmpty" style="display:none;">No products in this category yet.</p>
+      </div>
     </div>
 
     <!-- GALLERY PANEL -->
@@ -229,26 +276,139 @@ async function uploadImage(file) {
   return data.publicUrl;
 }
 
-// ---------- CATALOG (Product table) ----------
+// ---------- CATALOG (Product table) — category dashboard ----------
+let allProductRows = [];
+let currentCategoryName = null;
+
 async function loadCatalog() {
-  const { data, error } = await sb.from('Product').select('*').order('display_order', { ascending: true });
-  const list = document.getElementById('catalogList');
-  list.innerHTML = '';
-  if (error) { list.innerHTML = `<p class="empty-note">Error loading: ${error.message}</p>`; return; }
-  if (!data.length) { list.innerHTML = '<p class="empty-note">No items yet. Click "+ Add New" to create one.</p>'; return; }
-  data.forEach(item => {
-    const row = document.createElement('div');
-    row.className = 'card-row';
-    row.innerHTML = `
-      <img src="${item.image_url || ''}" onerror="this.style.visibility='hidden'">
-      <div class="info"><strong>${item.name}</strong><span>${item.section} · ${item.category || ''} · ${item.price || ''}</span></div>
-      <div class="actions">
-        <button class="btn-secondary btn-small" onclick='openForm("catalog", ${JSON.stringify(item)})'>Edit</button>
-        <button class="btn-danger" onclick="deleteRow('Product', ${item.id}, loadCatalog)">Delete</button>
-      </div>`;
-    list.appendChild(row);
-  });
+  // Kept for compatibility: refreshes the cached data and shows the dashboard.
+  await loadCatalogDashboard();
 }
+
+async function fetchProductRows() {
+  const { data, error } = await sb.from('Product').select('*').order('display_order', { ascending: true });
+  if (error) { showStatus('Error loading: ' + error.message); return false; }
+  allProductRows = data || [];
+  return true;
+}
+
+async function refreshCategory(catName) {
+  await fetchProductRows();
+  renderCategoryDetail(catName);
+}
+
+async function loadCatalogDashboard() {
+  document.getElementById('catDetail').style.display = 'none';
+  document.getElementById('catDashboard').style.display = 'block';
+  currentCategoryName = null;
+
+  const grid = document.getElementById('catGrid');
+  grid.innerHTML = '';
+  const ok = await fetchProductRows();
+  if (!ok) { grid.innerHTML = '<p class="empty-note">Error loading categories.</p>'; return; }
+
+  // Group rows by category. Each category may have one "collection" row
+  // (the homepage card) plus any number of "product" rows.
+  const categories = {};
+  allProductRows.forEach(row => {
+    const cat = (row.category || '').trim() || 'Uncategorized';
+    if (!categories[cat]) categories[cat] = { products: [], collectionRow: null };
+    if (row.section === 'collection') categories[cat].collectionRow = row;
+    else categories[cat].products.push(row);
+  });
+
+  const catNames = Object.keys(categories).sort((a, b) => a.localeCompare(b));
+  if (!catNames.length) {
+    grid.innerHTML = '<p class="empty-note">No categories yet. Add your first product to create one.</p>';
+  }
+  catNames.forEach(cat => {
+    const info = categories[cat];
+    const thumb = (info.collectionRow && info.collectionRow.image_url) || (info.products[0] && info.products[0].image_url) || '';
+    const card = document.createElement('button');
+    card.className = 'cat-card';
+    card.innerHTML = `
+      ${thumb ? `<img src="${thumb}" alt="${cat}" onerror="this.outerHTML='<div class=&quot;ph-fallback&quot;>${cat.charAt(0)}</div>'">` : `<div class="ph-fallback">${cat.charAt(0)}</div>`}
+      <div class="cat-info"><strong>${cat}</strong><span>${info.products.length} product${info.products.length === 1 ? '' : 's'}</span></div>`;
+    card.addEventListener('click', () => openCategory(cat));
+    grid.appendChild(card);
+  });
+
+  // "+ Add Category" tile — creates the first product in a brand-new category.
+  const addTile = document.createElement('button');
+  addTile.className = 'add-cat-card';
+  addTile.textContent = '+ Add Category';
+  addTile.addEventListener('click', () => {
+    const name = prompt('New category name (e.g. "Outdoor Furniture"):');
+    if (!name || !name.trim()) return;
+    openForm('catalog', null, name.trim());
+  });
+  grid.appendChild(addTile);
+}
+
+function openCategory(catName) {
+  currentCategoryName = catName;
+  document.getElementById('catDashboard').style.display = 'none';
+  document.getElementById('catDetail').style.display = 'block';
+  document.getElementById('editForm').style.display = 'none';
+  renderCategoryDetail(catName);
+}
+
+function closeCategory() {
+  loadCatalogDashboard();
+}
+
+function renderCategoryDetail(catName) {
+  const rows = allProductRows.filter(r => (r.category || '').trim() === catName || (catName === 'Uncategorized' && !(r.category || '').trim()));
+  const collectionRow = rows.find(r => r.section === 'collection');
+  const products = rows.filter(r => r.section === 'product');
+
+  document.getElementById('catDetailTitle').textContent = catName;
+  document.getElementById('catDetailCount').textContent = `${products.length} product${products.length === 1 ? '' : 's'}`;
+
+  // Homepage collection card (only shown if this category has one)
+  const collBox = document.getElementById('collectionCardBox');
+  if (collectionRow) {
+    collBox.innerHTML = `
+      <div class="collection-card-box">
+        <img src="${collectionRow.image_url || ''}" onerror="this.style.visibility='hidden'">
+        <div class="info" style="flex:1;">
+          <strong>Homepage Collection Card</strong>
+          <span class="muted" style="font-size:.8rem;">This is the "${catName}" card customers see on the homepage.</span>
+        </div>
+        <button class="btn-secondary btn-small" onclick='openForm("catalog", ${JSON.stringify(collectionRow)})'>Edit</button>
+      </div>`;
+  } else {
+    collBox.innerHTML = `<p class="muted" style="margin-bottom:16px; font-size:.82rem;">This category has no homepage collection card yet — it only appears here in the admin panel.</p>`;
+  }
+
+  // Products grid
+  const grid = document.getElementById('catProductGrid');
+  const emptyEl = document.getElementById('catProductEmpty');
+  grid.innerHTML = '';
+  if (!products.length) { emptyEl.style.display = 'block'; }
+  else {
+    emptyEl.style.display = 'none';
+    products.forEach(item => {
+      const card = document.createElement('div');
+      card.className = 'prod-card';
+      card.innerHTML = `
+        ${item.image_url ? `<img src="${item.image_url}" alt="${item.name}" onerror="this.outerHTML='<div class=&quot;ph-fallback&quot;></div>'">` : `<div class="ph-fallback"></div>`}
+        <div class="pbody">
+          <strong>${item.name}</strong>
+          <span class="price">${item.price || 'Enquire for Price'}</span>
+        </div>
+        <div class="pactions">
+          <button class="btn-secondary btn-small" onclick='openForm("catalog", ${JSON.stringify(item)})'>Edit</button>
+          <button class="btn-danger" onclick="deleteCatalogProduct(${item.id}, '${item.name.replace(/'/g, "\\'")}', '${catName.replace(/'/g, "\\'")}')">Delete</button>
+        </div>`;
+      grid.appendChild(card);
+    });
+  }
+}
+
+document.getElementById('catAddProductBtn').addEventListener('click', () => {
+  openForm('catalog', null, currentCategoryName);
+});
 
 // ---------- GALLERY ----------
 async function loadGallery() {
@@ -328,31 +488,65 @@ async function deleteRow(table, id, reload) {
   reload();
 }
 
+// Delete a single product from within a category view. Shows the product's
+// own name in the confirmation, and only removes that one row — the category
+// itself and every other product are untouched.
+async function deleteCatalogProduct(id, name, catName) {
+  if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+  const { error } = await sb.from('Product').delete().eq('id', id);
+  if (error) { showStatus('Error deleting: ' + error.message); return; }
+  showStatus(`"${name}" deleted.`);
+  await refreshCategory(catName);
+}
+
 // ---------- Shared Add/Edit form ----------
-function openForm(type, item) {
+function openForm(type, item, presetCategory) {
   const box = document.getElementById('editForm');
   box.style.display = 'block';
   box.scrollIntoView({ behavior: 'smooth' });
   const isEdit = !!item;
 
   if (type === 'catalog') {
+    // Editing the homepage "collection card" itself — simplified form, category/section locked.
+    if (item && item.section === 'collection') {
+      box.innerHTML = `
+        <h3>Edit Homepage Collection Card — ${item.name}</h3>
+        <p class="muted" style="margin-bottom:10px;">This is the card customers see on the homepage "Furniture for every room" section. The name and category stay locked to "${item.category}".</p>
+        <label>Description</label><textarea id="f_description" rows="2">${item.description || ''}</textarea>
+        <label>Photo</label><input id="f_image" type="file" accept="image/*">
+        <p class="upload-status">${item.image_url ? 'Current photo is set. Choose a file above to replace it.' : 'No photo set yet.'}</p>
+        <div style="display:flex; gap:10px;">
+          <button class="btn-primary" onclick="submitCollectionCard(${item.id}, '${item.image_url || ''}')">Save</button>
+          <button class="btn-secondary" onclick="document.getElementById('editForm').style.display='none'">Cancel</button>
+        </div>`;
+      return;
+    }
+
+    // Adding or editing a product.
+    const existingCategories = [...new Set(allProductRows.map(r => (r.category || '').trim()).filter(Boolean))].sort();
+    const selectedCategory = item?.category || presetCategory || '';
+    const categoryOptions = existingCategories.map(c =>
+      `<option value="${c}" ${c === selectedCategory ? 'selected' : ''}>${c}</option>`
+    ).join('');
+    const showsNewCategoryInput = selectedCategory && !existingCategories.includes(selectedCategory);
+
     box.innerHTML = `
-      <h3>${isEdit ? 'Edit' : 'Add'} Collection / Product</h3>
-      <div class="form-row cols-2">
-        <div><label>Name</label><input id="f_name" value="${item?.name || ''}"></div>
-        <div><label>Section</label>
-          <select id="f_section">
-            <option value="collection" ${item?.section==='collection'?'selected':''}>Collection</option>
-            <option value="product" ${item?.section==='product'?'selected':''}>Product</option>
-          </select>
-        </div>
-      </div>
+      <h3>${isEdit ? 'Edit' : 'Add New'} Product</h3>
+      <label>Name</label><input id="f_name" value="${item?.name || ''}" placeholder="e.g. Modern Bed">
       <label>Description</label><textarea id="f_description" rows="2">${item?.description || ''}</textarea>
       <div class="form-row cols-2">
-        <div><label>Category</label><input id="f_category" value="${item?.category || ''}"></div>
+        <div>
+          <label>Category</label>
+          <select id="f_category_select" onchange="document.getElementById('f_category_new').style.display = this.value === '__new__' ? 'block' : 'none'">
+            <option value="">Select category…</option>
+            ${categoryOptions}
+            <option value="__new__" ${showsNewCategoryInput ? 'selected' : ''}>+ New category…</option>
+          </select>
+          <input id="f_category_new" placeholder="New category name" value="${showsNewCategoryInput ? selectedCategory : ''}" style="display:${showsNewCategoryInput ? 'block' : 'none'};">
+        </div>
         <div><label>Price (leave blank or type "Enquire for Price")</label><input id="f_price" value="${item?.price || ''}"></div>
       </div>
-      <label>Display Order (number, lower = shows first)</label><input id="f_order" type="number" value="${item?.display_order ?? ''}">
+      <label>Display Order (number, lower = shows first)</label><input id="f_order" type="number" value="${item?.display_order ?? '1'}">
       <label>Photo</label><input id="f_image" type="file" accept="image/*">
       <p class="upload-status" id="f_upload_status">${item?.image_url ? 'Current photo is set. Choose a file above to replace it.' : 'No photo set yet.'}</p>
       <div style="display:flex; gap:10px;">
@@ -396,11 +590,17 @@ async function submitCatalog(id, existingImageUrl) {
     try { image_url = await uploadImage(file); }
     catch (e) { showStatus('Image upload failed: ' + e.message); return; }
   }
+  const categorySelect = document.getElementById('f_category_select').value;
+  const category = categorySelect === '__new__'
+    ? document.getElementById('f_category_new').value.trim()
+    : categorySelect.trim();
+  if (!category) { showStatus('Please choose or enter a category.'); return; }
+
   const row = {
     name: document.getElementById('f_name').value.trim(),
     description: document.getElementById('f_description').value.trim(),
-    section: document.getElementById('f_section').value,
-    category: document.getElementById('f_category').value.trim(),
+    section: 'product', // this form only ever adds/edits individual products; homepage collection cards use submitCollectionCard
+    category: category,
     price: document.getElementById('f_price').value.trim(),
     display_order: document.getElementById('f_order').value ? Number(document.getElementById('f_order').value) : null,
     image_url,
@@ -409,7 +609,30 @@ async function submitCatalog(id, existingImageUrl) {
   if (error) { showStatus('Save failed: ' + error.message); return; }
   showStatus('Saved');
   document.getElementById('editForm').style.display = 'none';
-  loadCatalog();
+  await refreshCategory(category);
+}
+
+// Saves edits to a homepage "collection" card (the Bedroom/Living Room/etc.
+// cards customers see on the public homepage). Only description and photo
+// are editable here — name, category and section stay exactly as they are,
+// so this never creates a duplicate or disturbs the products inside it.
+async function submitCollectionCard(id, existingImageUrl) {
+  const file = document.getElementById('f_image').files[0];
+  let image_url = existingImageUrl;
+  if (file) {
+    showStatus('Uploading photo…');
+    try { image_url = await uploadImage(file); }
+    catch (e) { showStatus('Image upload failed: ' + e.message); return; }
+  }
+  const row = {
+    description: document.getElementById('f_description').value.trim(),
+    image_url,
+  };
+  const { error } = await sb.from('Product').update(row).eq('id', id);
+  if (error) { showStatus('Save failed: ' + error.message); return; }
+  showStatus('Saved');
+  document.getElementById('editForm').style.display = 'none';
+  await refreshCategory(currentCategoryName);
 }
 
 async function submitGallery(id, existingImageUrl) {
