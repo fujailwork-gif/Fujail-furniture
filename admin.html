@@ -130,6 +130,7 @@
 
     <div class="tabs">
       <button class="tab-btn active" data-tab="catalog">Collections & Products</button>
+      <button class="tab-btn" data-tab="featured">Featured Pieces</button>
       <button class="tab-btn" data-tab="gallery">Our Work</button>
       <button class="tab-btn" data-tab="testimonials">Testimonials</button>
       <button class="tab-btn" data-tab="settings">Contact Details</button>
@@ -162,6 +163,17 @@
         <div class="prod-grid" id="catProductGrid"></div>
         <p class="empty-note" id="catProductEmpty" style="display:none;">No products in this category yet.</p>
       </div>
+    </div>
+
+    <!-- FEATURED PIECES PANEL (independent flat list — not linked to Collections categories) -->
+    <div class="panel" id="panel-featured">
+      <div class="toolbar">
+        <h2>Featured Pieces</h2>
+        <button class="btn-primary btn-small" onclick="openForm('featured')">+ Add New</button>
+      </div>
+      <p class="muted" style="margin-bottom:14px;">These show in the "A few favourites" section on the homepage. Fully independent from the Collections categories above.</p>
+      <div class="prod-grid" id="featuredGrid"></div>
+      <p class="empty-note" id="featuredEmpty" style="display:none;">No featured pieces yet.</p>
     </div>
 
     <!-- GALLERY PANEL -->
@@ -244,6 +256,7 @@ async function showDashboard(user) {
   document.getElementById('dashboard').style.display = 'block';
   document.getElementById('whoAmI').textContent = 'Signed in as ' + user.email;
   loadCatalog();
+  loadFeatured();
   loadGallery();
   loadTestimonials();
   loadSettings();
@@ -410,6 +423,66 @@ document.getElementById('catAddProductBtn').addEventListener('click', () => {
   openForm('catalog', null, currentCategoryName);
 });
 
+// ---------- FEATURED PIECES (flat list, independent of Collections categories) ----------
+async function loadFeatured() {
+  const { data, error } = await sb.from('Product').select('*').eq('section', 'product').order('display_order', { ascending: true });
+  const grid = document.getElementById('featuredGrid');
+  const emptyEl = document.getElementById('featuredEmpty');
+  grid.innerHTML = '';
+  if (error) { grid.innerHTML = `<p class="empty-note">Error loading: ${error.message}</p>`; return; }
+  if (!data.length) { emptyEl.style.display = 'block'; return; }
+  emptyEl.style.display = 'none';
+  data.forEach(item => {
+    const card = document.createElement('div');
+    card.className = 'prod-card';
+    card.innerHTML = `
+      ${item.image_url ? `<img src="${item.image_url}" alt="${item.name}" onerror="this.outerHTML='<div class=&quot;ph-fallback&quot;></div>'">` : `<div class="ph-fallback"></div>`}
+      <div class="pbody">
+        <strong>${item.name}</strong>
+        <span class="price">${item.price || 'Enquire for Price'}</span>
+      </div>
+      <div class="pactions">
+        <button class="btn-secondary btn-small" onclick='openForm("featured", ${JSON.stringify(item)})'>Edit</button>
+        <button class="btn-danger" onclick="deleteFeaturedProduct(${item.id}, '${item.name.replace(/'/g, "\\'")}')">Delete</button>
+      </div>`;
+    grid.appendChild(card);
+  });
+}
+
+async function deleteFeaturedProduct(id, name) {
+  if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+  const { error } = await sb.from('Product').delete().eq('id', id);
+  if (error) { showStatus('Error deleting: ' + error.message); return; }
+  showStatus(`"${name}" deleted.`);
+  loadFeatured();
+}
+
+async function submitFeatured(id, existingImageUrl) {
+  const file = document.getElementById('f_image').files[0];
+  let image_url = existingImageUrl;
+  if (file) {
+    showStatus('Uploading photo…');
+    try { image_url = await uploadImage(file); }
+    catch (e) { showStatus('Image upload failed: ' + e.message); return; }
+  }
+  const row = {
+    name: document.getElementById('f_name').value.trim(),
+    description: document.getElementById('f_description').value.trim(),
+    section: 'product',
+    category: document.getElementById('f_category_optional').value.trim() || null,
+    price: document.getElementById('f_price').value.trim(),
+    display_order: document.getElementById('f_order').value ? Number(document.getElementById('f_order').value) : null,
+    image_url,
+  };
+  const { error } = id ? await sb.from('Product').update(row).eq('id', id) : await sb.from('Product').insert(row);
+  if (error) { showStatus('Save failed: ' + error.message); return; }
+  showStatus('Saved');
+  document.getElementById('editForm').style.display = 'none';
+  loadFeatured();
+  // If this product also has a category, the Collections dashboard shows it there too — refresh its cache quietly.
+  fetchProductRows();
+}
+
 // ---------- GALLERY ----------
 async function loadGallery() {
   const { data, error } = await sb.from('Gallery').select('*');
@@ -497,6 +570,7 @@ async function deleteCatalogProduct(id, name, catName) {
   if (error) { showStatus('Error deleting: ' + error.message); return; }
   showStatus(`"${name}" deleted.`);
   await refreshCategory(catName);
+  loadFeatured(); // keep the independent Featured Pieces list in sync too
 }
 
 // ---------- Shared Add/Edit form ----------
@@ -551,6 +625,24 @@ function openForm(type, item, presetCategory) {
       <p class="upload-status" id="f_upload_status">${item?.image_url ? 'Current photo is set. Choose a file above to replace it.' : 'No photo set yet.'}</p>
       <div style="display:flex; gap:10px;">
         <button class="btn-primary" onclick="submitCatalog(${item?.id || 'null'}, '${item?.image_url || ''}')">Save</button>
+        <button class="btn-secondary" onclick="document.getElementById('editForm').style.display='none'">Cancel</button>
+      </div>`;
+  }
+
+  if (type === 'featured') {
+    box.innerHTML = `
+      <h3>${isEdit ? 'Edit' : 'Add New'} Featured Piece</h3>
+      <label>Name</label><input id="f_name" value="${item?.name || ''}" placeholder="e.g. Modern Bed">
+      <label>Description</label><textarea id="f_description" rows="2">${item?.description || ''}</textarea>
+      <div class="form-row cols-2">
+        <div><label>Category (optional)</label><input id="f_category_optional" value="${item?.category || ''}" placeholder="e.g. Bed — optional"></div>
+        <div><label>Price (leave blank or type "Enquire for Price")</label><input id="f_price" value="${item?.price || ''}"></div>
+      </div>
+      <label>Display Order (number, lower = shows first)</label><input id="f_order" type="number" value="${item?.display_order ?? '1'}">
+      <label>Photo</label><input id="f_image" type="file" accept="image/*">
+      <p class="upload-status">${item?.image_url ? 'Current photo is set. Choose a file above to replace it.' : 'No photo set yet.'}</p>
+      <div style="display:flex; gap:10px;">
+        <button class="btn-primary" onclick="submitFeatured(${item?.id || 'null'}, '${item?.image_url || ''}')">Save</button>
         <button class="btn-secondary" onclick="document.getElementById('editForm').style.display='none'">Cancel</button>
       </div>`;
   }
@@ -610,6 +702,7 @@ async function submitCatalog(id, existingImageUrl) {
   showStatus('Saved');
   document.getElementById('editForm').style.display = 'none';
   await refreshCategory(category);
+  loadFeatured(); // keep the independent Featured Pieces list in sync too
 }
 
 // Saves edits to a homepage "collection" card (the Bedroom/Living Room/etc.
