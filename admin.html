@@ -134,6 +134,7 @@
       <button class="tab-btn" data-tab="gallery">Our Work</button>
       <button class="tab-btn" data-tab="testimonials">Testimonials</button>
       <button class="tab-btn" data-tab="settings">Contact Details</button>
+      <button class="tab-btn" data-tab="pagecontent">Page Content</button>
     </div>
 
     <!-- CATALOG PANEL -->
@@ -208,6 +209,53 @@
         </div>
         <button class="btn-primary btn-small" style="margin-top:10px;" onclick="saveSettings()">Save Contact Details</button>
       </div>
+    </div>
+
+    <!-- PAGE CONTENT PANEL -->
+    <div class="panel" id="panel-pagecontent">
+      <h2>Page Content</h2>
+      <p class="muted" style="margin:6px 0 16px;">Edit the Hero banner, "Who We Are", "Custom Furniture" and "Craftsmanship" sections on the homepage.</p>
+
+      <div class="form-box">
+        <h3>Hero Banner</h3>
+        <label>Heading</label><input id="pc_hero_heading">
+        <label>Sub-text</label><textarea id="pc_hero_body" rows="2"></textarea>
+        <label>Photo</label><input id="pc_hero_image" type="file" accept="image/*">
+        <p class="upload-status" id="pc_hero_status"></p>
+        <button class="btn-primary btn-small" onclick="savePageBlock('hero')">Save Hero</button>
+      </div>
+
+      <div class="form-box">
+        <h3>Who We Are</h3>
+        <label>Heading</label><input id="pc_who_heading">
+        <label>Text</label><textarea id="pc_who_body" rows="3"></textarea>
+        <label>Photo</label><input id="pc_who_image" type="file" accept="image/*">
+        <p class="upload-status" id="pc_who_status"></p>
+        <button class="btn-primary btn-small" onclick="savePageBlock('who_we_are')">Save Who We Are</button>
+      </div>
+
+      <div class="form-box">
+        <h3>Custom Furniture Section</h3>
+        <label>Heading</label><input id="pc_custom_heading">
+        <label>Text</label><textarea id="pc_custom_body" rows="2"></textarea>
+        <label>Photo</label><input id="pc_custom_image" type="file" accept="image/*">
+        <p class="upload-status" id="pc_custom_status"></p>
+        <button class="btn-primary btn-small" onclick="savePageBlock('custom_furniture')">Save Custom Furniture</button>
+      </div>
+
+      <div class="form-box">
+        <h3>Craftsmanship — Intro</h3>
+        <label>Heading</label><input id="pc_craft_heading">
+        <label>Text</label><textarea id="pc_craft_body" rows="2"></textarea>
+        <button class="btn-primary btn-small" onclick="savePageBlock('craftsmanship_intro')">Save Craftsmanship Intro</button>
+      </div>
+
+      <div class="toolbar">
+        <h3 style="margin:0;">Craftsmanship — Steps</h3>
+        <button class="btn-primary btn-small" onclick="openStepForm()">+ Add Step</button>
+      </div>
+      <div class="prod-grid" id="stepsGrid"></div>
+      <p class="empty-note" id="stepsEmpty" style="display:none;">No steps added yet.</p>
     </div>
 
     <!-- SHARED ADD/EDIT FORM -->
@@ -550,6 +598,111 @@ async function saveSettings() {
     if (error) { showStatus('Error saving ' + key); return; }
   }
   showStatus('Contact details saved');
+}
+
+// ---------- PAGE CONTENT ----------
+const PC_FIELD_MAP = {
+  hero: { heading: 'pc_hero_heading', body: 'pc_hero_body', image: 'pc_hero_image', status: 'pc_hero_status' },
+  who_we_are: { heading: 'pc_who_heading', body: 'pc_who_body', image: 'pc_who_image', status: 'pc_who_status' },
+  custom_furniture: { heading: 'pc_custom_heading', body: 'pc_custom_body', image: 'pc_custom_image', status: 'pc_custom_status' },
+  craftsmanship_intro: { heading: 'pc_craft_heading', body: 'pc_craft_body' },
+};
+
+async function loadPageContentAdmin() {
+  const { data, error } = await sb.from('Page_Content').select('*').order('display_order', { ascending: true });
+  if (error) { showStatus('Error loading page content: ' + error.message); return; }
+
+  (data || []).forEach(row => {
+    const f = PC_FIELD_MAP[row.section];
+    if (!f) return;
+    if (document.getElementById(f.heading)) document.getElementById(f.heading).value = row.heading || '';
+    if (f.body && document.getElementById(f.body)) document.getElementById(f.body).value = row.body_text || '';
+    if (f.status) document.getElementById(f.status).textContent = row.image_url ? 'Current photo is set. Choose a file to replace it.' : 'No photo set yet.';
+  });
+
+  const steps = (data || []).filter(r => r.section === 'craftsmanship_step');
+  const grid = document.getElementById('stepsGrid');
+  const emptyEl = document.getElementById('stepsEmpty');
+  grid.innerHTML = '';
+  if (!steps.length) { emptyEl.style.display = 'block'; return; }
+  emptyEl.style.display = 'none';
+  steps.forEach(s => {
+    const card = document.createElement('div');
+    card.className = 'prod-card';
+    card.innerHTML = `
+      ${s.image_url ? `<img src="${s.image_url}" alt="${s.heading}">` : `<div class="ph-fallback"></div>`}
+      <div class="pbody"><strong>${s.heading}</strong></div>
+      <div class="pactions">
+        <button class="btn-secondary btn-small" onclick='openStepForm(${JSON.stringify(s)})'>Edit</button>
+        <button class="btn-danger" onclick="deleteRow('Page_Content', ${s.id}, loadPageContentAdmin)">Delete</button>
+      </div>`;
+    grid.appendChild(card);
+  });
+}
+
+async function savePageBlock(section) {
+  const f = PC_FIELD_MAP[section];
+  const heading = document.getElementById(f.heading).value.trim();
+  const body_text = f.body ? document.getElementById(f.body).value.trim() : null;
+
+  let image_url;
+  if (f.image) {
+    const file = document.getElementById(f.image).files[0];
+    if (file) {
+      f.status && (document.getElementById(f.status).textContent = 'Uploading…');
+      try { image_url = await uploadImage(file); }
+      catch (e) { showStatus('Image upload failed: ' + e.message); return; }
+    }
+  }
+
+  const { data: existing } = await sb.from('Page_Content').select('id').eq('section', section).maybeSingle();
+  const row = { section, heading, body_text, display_order: 1 };
+  if (image_url) row.image_url = image_url;
+
+  const { error } = existing
+    ? await sb.from('Page_Content').update(row).eq('id', existing.id)
+    : await sb.from('Page_Content').insert(row);
+
+  if (error) { showStatus('Save failed: ' + error.message); return; }
+  showStatus('Saved');
+  loadPageContentAdmin();
+}
+
+function openStepForm(item) {
+  const box = document.getElementById('editForm');
+  box.style.display = 'block';
+  box.innerHTML = `
+    <h3>${item ? 'Edit' : 'Add New'} Craftsmanship Step</h3>
+    <label>Step Name</label><input id="f_step_name" value="${item?.heading || ''}" placeholder="e.g. Material Selection">
+    <label>Display Order (number, lower = shows first)</label><input id="f_step_order" type="number" value="${item?.display_order ?? '1'}">
+    <label>Photo (optional)</label><input id="f_step_image" type="file" accept="image/*">
+    <p class="upload-status">${item?.image_url ? 'Current photo is set. Choose a file above to replace it.' : 'No photo set yet — step will show as a plain label.'}</p>
+    <div style="display:flex; gap:10px;">
+      <button class="btn-primary" onclick="submitStep(${item?.id || 'null'}, '${item?.image_url || ''}')">Save</button>
+      <button class="btn-secondary" onclick="document.getElementById('editForm').style.display='none'">Cancel</button>
+    </div>`;
+  window.scrollTo({ top: box.offsetTop - 20, behavior: 'smooth' });
+}
+
+async function submitStep(id, existingImageUrl) {
+  const file = document.getElementById('f_step_image').files[0];
+  let image_url = existingImageUrl || null;
+  if (file) {
+    showStatus('Uploading photo…');
+    try { image_url = await uploadImage(file); }
+    catch (e) { showStatus('Image upload failed: ' + e.message); return; }
+  }
+  const row = {
+    section: 'craftsmanship_step',
+    heading: document.getElementById('f_step_name').value.trim(),
+    display_order: document.getElementById('f_step_order').value ? Number(document.getElementById('f_step_order').value) : 1,
+    image_url,
+  };
+  const { error } = id ? await sb.from('Page_Content').update(row).eq('id', id) : await sb.from('Page_Content').insert(row);
+  if (error) { showStatus('Save failed: ' + error.message); return; }
+  showStatus('Saved');
+  document.getElementById('editForm').style.display = 'none';
+  loadPageContentAdmin();
 }
 
 // ---------- Delete ----------
