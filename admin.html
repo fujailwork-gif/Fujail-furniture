@@ -655,13 +655,24 @@ async function savePageBlock(section) {
     }
   }
 
-  const { data: existing } = await sb.from('Page_Content').select('id').eq('section', section).maybeSingle();
+  // Use the most recently created row for this section (if several exist from
+  // earlier duplicate saves), and clean up any older duplicates so this section
+  // always has exactly one row going forward.
+  const { data: existingRows } = await sb.from('Page_Content').select('id').eq('section', section).order('id', { ascending: false });
   const row = { section, heading, body_text, display_order: 1 };
   if (image_url) row.image_url = image_url;
 
-  const { error } = existing
-    ? await sb.from('Page_Content').update(row).eq('id', existing.id)
-    : await sb.from('Page_Content').insert(row);
+  let error;
+  if (existingRows && existingRows.length) {
+    const keepId = existingRows[0].id;
+    ({ error } = await sb.from('Page_Content').update(row).eq('id', keepId));
+    if (!error && existingRows.length > 1) {
+      const staleIds = existingRows.slice(1).map(r => r.id);
+      await sb.from('Page_Content').delete().in('id', staleIds);
+    }
+  } else {
+    ({ error } = await sb.from('Page_Content').insert(row));
+  }
 
   if (error) { showStatus('Save failed: ' + error.message); return; }
   showStatus('Saved');
