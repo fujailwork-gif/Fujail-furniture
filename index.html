@@ -485,12 +485,17 @@ const prodGrid = document.getElementById('productsGrid');
 const workGrid = document.getElementById('workGrid');
 
 async function loadCatalog() {
+  // "Furniture for every room" collection cards — these come from the Product
+  // table (section='collection'), completely independent of Featured Pieces below.
   const items = await fetchTable('Product', 'select=*&order=display_order.asc.nullslast');
   const collections = items.filter(i => i.section === 'collection');
-  const products = items.filter(i => i.section === 'product');
-
   collections.forEach(i => collGrid.appendChild(makeCard(i.name, i.description, null, i.image_url || null, `category.html?name=${encodeURIComponent(i.category || i.name)}`)));
-  products.forEach(i => prodGrid.appendChild(makeCard(i.name, i.description, i.price || 'Enquire for Price', i.image_url || null, `product.html?name=${encodeURIComponent(i.name)}`)));
+}
+
+async function loadFeaturedPieces() {
+  // "A few favourites" — its own separate table, fully independent of Collections/Categories.
+  const items = await fetchTable('Featured_Products', 'select=*&order=display_order.asc.nullslast');
+  items.forEach(i => prodGrid.appendChild(makeCard(i.name, i.description, i.price || 'Enquire for Price', i.image_url || null)));
 }
 
 async function loadGallery() {
