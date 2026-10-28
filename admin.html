@@ -76,7 +76,7 @@
   .add-cat-card{background:transparent; border:2px dashed var(--line); border-radius:8px; display:flex; align-items:center; justify-content:center; min-height:160px; color:var(--charcoal-soft); font-weight:600; font-size:.9rem; cursor:pointer;}
 
   /* Category detail */
-  #catDetail{display:none;}
+  #catDetail, #featDetail, #galDetail{display:none;}
   .back-btn{background:none; border:none; color:var(--wood-deep); font-weight:600; font-size:.9rem; padding:8px 0; margin-bottom:10px; display:inline-flex; align-items:center; gap:4px;}
   .collection-card-box{background:var(--paper); border:1px solid var(--line); border-radius:6px; padding:14px 16px; margin-bottom:18px; display:flex; gap:14px; align-items:center;}
   .collection-card-box img{width:60px; height:60px; object-fit:cover; border-radius:4px; background:var(--line);}
@@ -166,24 +166,50 @@
       </div>
     </div>
 
-    <!-- FEATURED PIECES PANEL (independent flat list — not linked to Collections categories) -->
+    <!-- FEATURED PIECES PANEL (its own category system — independent of Collections above) -->
     <div class="panel" id="panel-featured">
-      <div class="toolbar">
-        <h2>Featured Pieces</h2>
-        <button class="btn-primary btn-small" onclick="openForm('featured')">+ Add New</button>
+      <div id="featDashboard">
+        <div class="toolbar">
+          <h2>Featured Pieces — Browse by Category</h2>
+        </div>
+        <p class="muted" style="margin-bottom:14px;">Tap a category to see and manage its pieces. Fully independent from the Collections categories above.</p>
+        <div class="cat-grid" id="featCatGrid"></div>
       </div>
-      <p class="muted" style="margin-bottom:14px;">These show in the "A few favourites" section on the homepage. Fully independent from the Collections categories above.</p>
-      <div class="prod-grid" id="featuredGrid"></div>
-      <p class="empty-note" id="featuredEmpty" style="display:none;">No featured pieces yet.</p>
+
+      <div id="featDetail">
+        <button class="back-btn" onclick="closeFeaturedCategory()">← All Featured Categories</button>
+        <h2 id="featDetailTitle"></h2>
+        <p class="muted" id="featDetailCount" style="margin:4px 0 16px;"></p>
+        <div class="toolbar">
+          <h2 style="font-size:1rem;">Pieces</h2>
+          <button class="btn-primary btn-small" id="featAddItemBtn">+ Add Piece</button>
+        </div>
+        <div class="prod-grid" id="featProductGrid"></div>
+        <p class="empty-note" id="featProductEmpty" style="display:none;">No pieces in this category yet.</p>
+      </div>
     </div>
 
-    <!-- GALLERY PANEL -->
+    <!-- GALLERY PANEL (Our Work — same category-dashboard system) -->
     <div class="panel" id="panel-gallery">
-      <div class="toolbar">
-        <h2>Our Work</h2>
-        <button class="btn-primary btn-small" onclick="openForm('gallery')">+ Add New</button>
+      <div id="galDashboard">
+        <div class="toolbar">
+          <h2>Our Work — Browse by Category</h2>
+        </div>
+        <p class="muted" style="margin-bottom:14px;">Tap a category to see and manage its project photos.</p>
+        <div class="cat-grid" id="galCatGrid"></div>
       </div>
-      <div id="galleryList"></div>
+
+      <div id="galDetail">
+        <button class="back-btn" onclick="closeGalleryCategory()">← All Work Categories</button>
+        <h2 id="galDetailTitle"></h2>
+        <p class="muted" id="galDetailCount" style="margin:4px 0 16px;"></p>
+        <div class="toolbar">
+          <h2 style="font-size:1rem;">Photos</h2>
+          <button class="btn-primary btn-small" id="galAddItemBtn">+ Add Photo</button>
+        </div>
+        <div class="prod-grid" id="galProductGrid"></div>
+        <p class="empty-note" id="galProductEmpty" style="display:none;">No photos in this category yet.</p>
+      </div>
     </div>
 
     <!-- TESTIMONIALS PANEL -->
@@ -304,8 +330,8 @@ async function showDashboard(user) {
   document.getElementById('dashboard').style.display = 'block';
   document.getElementById('whoAmI').textContent = 'Signed in as ' + user.email;
   loadCatalog();
-  loadFeatured();
-  loadGallery();
+  loadFeaturedDashboard();
+  loadGalleryDashboard();
   loadTestimonials();
   loadSettings();
 }
@@ -471,38 +497,118 @@ document.getElementById('catAddProductBtn').addEventListener('click', () => {
   openForm('catalog', null, currentCategoryName);
 });
 
-// ---------- FEATURED PIECES (flat list, independent of Collections categories) ----------
-async function loadFeatured() {
+// ---------- FEATURED PIECES — category dashboard (own table, own categories) ----------
+let allFeaturedRows = [];
+let currentFeaturedCategory = null;
+
+async function fetchFeaturedRows() {
   const { data, error } = await sb.from('Featured_Products').select('*').order('display_order', { ascending: true });
-  const grid = document.getElementById('featuredGrid');
-  const emptyEl = document.getElementById('featuredEmpty');
-  grid.innerHTML = '';
-  if (error) { grid.innerHTML = `<p class="empty-note">Error loading: ${error.message}</p>`; return; }
-  if (!data.length) { emptyEl.style.display = 'block'; return; }
-  emptyEl.style.display = 'none';
-  data.forEach(item => {
-    const card = document.createElement('div');
-    card.className = 'prod-card';
-    card.innerHTML = `
-      ${item.image_url ? `<img src="${item.image_url}" alt="${item.name}" onerror="this.outerHTML='<div class=&quot;ph-fallback&quot;></div>'">` : `<div class="ph-fallback"></div>`}
-      <div class="pbody">
-        <strong>${item.name}</strong>
-        <span class="price">${item.price || 'Enquire for Price'}</span>
-      </div>
-      <div class="pactions">
-        <button class="btn-secondary btn-small" onclick='openForm("featured", ${JSON.stringify(item)})'>Edit</button>
-        <button class="btn-danger" onclick="deleteFeaturedProduct(${item.id}, '${item.name.replace(/'/g, "\\'")}')">Delete</button>
-      </div>`;
-    grid.appendChild(card);
-  });
+  if (error) { showStatus('Error loading: ' + error.message); return false; }
+  allFeaturedRows = data || [];
+  return true;
 }
 
-async function deleteFeaturedProduct(id, name) {
+async function refreshFeaturedCategory(catName) {
+  await fetchFeaturedRows();
+  renderFeaturedCategoryDetail(catName);
+}
+
+async function loadFeaturedDashboard() {
+  document.getElementById('featDetail').style.display = 'none';
+  document.getElementById('featDashboard').style.display = 'block';
+  currentFeaturedCategory = null;
+
+  const grid = document.getElementById('featCatGrid');
+  grid.innerHTML = '';
+  const ok = await fetchFeaturedRows();
+  if (!ok) { grid.innerHTML = '<p class="empty-note">Error loading categories.</p>'; return; }
+
+  const categories = {};
+  allFeaturedRows.forEach(row => {
+    const cat = (row.category || '').trim() || 'Uncategorized';
+    if (!categories[cat]) categories[cat] = [];
+    categories[cat].push(row);
+  });
+
+  const catNames = Object.keys(categories).sort((a, b) => a.localeCompare(b));
+  if (!catNames.length) {
+    grid.innerHTML = '<p class="empty-note">No categories yet. Add your first piece to create one.</p>';
+  }
+  catNames.forEach(cat => {
+    const items = categories[cat];
+    const thumb = (items[0] && items[0].image_url) || '';
+    const card = document.createElement('button');
+    card.className = 'cat-card';
+    card.innerHTML = `
+      ${thumb ? `<img src="${thumb}" alt="${cat}" onerror="this.outerHTML='<div class=&quot;ph-fallback&quot;>${cat.charAt(0)}</div>'">` : `<div class="ph-fallback">${cat.charAt(0)}</div>`}
+      <div class="cat-info"><strong>${cat}</strong><span>${items.length} piece${items.length === 1 ? '' : 's'}</span></div>`;
+    card.addEventListener('click', () => openFeaturedCategory(cat));
+    grid.appendChild(card);
+  });
+
+  const addTile = document.createElement('button');
+  addTile.className = 'add-cat-card';
+  addTile.textContent = '+ Add Category';
+  addTile.addEventListener('click', () => {
+    const name = prompt('New category name (e.g. "Sofa"):');
+    if (!name || !name.trim()) return;
+    openForm('featured', null, name.trim());
+  });
+  grid.appendChild(addTile);
+}
+
+function openFeaturedCategory(catName) {
+  currentFeaturedCategory = catName;
+  document.getElementById('featDashboard').style.display = 'none';
+  document.getElementById('featDetail').style.display = 'block';
+  document.getElementById('editForm').style.display = 'none';
+  renderFeaturedCategoryDetail(catName);
+}
+
+function closeFeaturedCategory() {
+  loadFeaturedDashboard();
+}
+
+function renderFeaturedCategoryDetail(catName) {
+  const items = allFeaturedRows.filter(r => (r.category || '').trim() === catName || (catName === 'Uncategorized' && !(r.category || '').trim()));
+
+  document.getElementById('featDetailTitle').textContent = catName;
+  document.getElementById('featDetailCount').textContent = `${items.length} piece${items.length === 1 ? '' : 's'}`;
+
+  const grid = document.getElementById('featProductGrid');
+  const emptyEl = document.getElementById('featProductEmpty');
+  grid.innerHTML = '';
+  if (!items.length) { emptyEl.style.display = 'block'; }
+  else {
+    emptyEl.style.display = 'none';
+    items.forEach(item => {
+      const card = document.createElement('div');
+      card.className = 'prod-card';
+      card.innerHTML = `
+        ${item.image_url ? `<img src="${item.image_url}" alt="${item.name}" onerror="this.outerHTML='<div class=&quot;ph-fallback&quot;></div>'">` : `<div class="ph-fallback"></div>`}
+        <div class="pbody">
+          <strong>${item.name}</strong>
+          <span class="price">${item.price || 'Enquire for Price'}</span>
+        </div>
+        <div class="pactions">
+          <button class="btn-secondary btn-small" onclick='openForm("featured", ${JSON.stringify(item)})'>Edit</button>
+          <button class="btn-danger" onclick="deleteFeaturedProduct(${item.id}, '${item.name.replace(/'/g, "\\'")}', '${catName.replace(/'/g, "\\'")}')">Delete</button>
+        </div>`;
+      grid.appendChild(card);
+    });
+  }
+}
+
+document.getElementById('featAddItemBtn').addEventListener('click', () => {
+  openForm('featured', null, currentFeaturedCategory);
+});
+
+async function deleteFeaturedProduct(id, name, catName) {
   if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
   const { error } = await sb.from('Featured_Products').delete().eq('id', id);
   if (error) { showStatus('Error deleting: ' + error.message); return; }
   showStatus(`"${name}" deleted.`);
-  loadFeatured();
+  await refreshFeaturedCategory(catName);
 }
 
 async function submitFeatured(id, existingImageUrl) {
@@ -513,9 +619,11 @@ async function submitFeatured(id, existingImageUrl) {
     try { image_url = await uploadImage(file); }
     catch (e) { showStatus('Image upload failed: ' + e.message); return; }
   }
+  const category = document.getElementById('f_featured_category').value.trim() || currentFeaturedCategory || null;
   const row = {
     name: document.getElementById('f_name').value.trim(),
     description: document.getElementById('f_description').value.trim(),
+    category,
     price: document.getElementById('f_price').value.trim(),
     display_order: document.getElementById('f_order').value ? Number(document.getElementById('f_order').value) : null,
     image_url,
@@ -526,28 +634,118 @@ async function submitFeatured(id, existingImageUrl) {
   if (error) { showStatus('Save failed: ' + error.message); return; }
   showStatus('Saved');
   document.getElementById('editForm').style.display = 'none';
-  loadFeatured();
+  await refreshFeaturedCategory(category);
 }
 
-// ---------- GALLERY ----------
-async function loadGallery() {
+// ---------- OUR WORK (Gallery) — category dashboard ----------
+let allGalleryRows = [];
+let currentGalleryCategory = null;
+
+async function fetchGalleryRows() {
   const { data, error } = await sb.from('Gallery').select('*');
-  const list = document.getElementById('galleryList');
-  list.innerHTML = '';
-  if (error) { list.innerHTML = `<p class="empty-note">Error loading: ${error.message}</p>`; return; }
-  if (!data.length) { list.innerHTML = '<p class="empty-note">No projects yet.</p>'; return; }
-  data.forEach(item => {
-    const row = document.createElement('div');
-    row.className = 'card-row';
-    row.innerHTML = `
-      <img src="${item.image_url || ''}" onerror="this.style.visibility='hidden'">
-      <div class="info"><strong>${item.project_name}</strong><span>${item.category || ''}</span></div>
-      <div class="actions">
-        <button class="btn-secondary btn-small" onclick='openForm("gallery", ${JSON.stringify(item)})'>Edit</button>
-        <button class="btn-danger" onclick="deleteRow('Gallery', ${item.id}, loadGallery)">Delete</button>
-      </div>`;
-    list.appendChild(row);
+  if (error) { showStatus('Error loading: ' + error.message); return false; }
+  allGalleryRows = data || [];
+  return true;
+}
+
+async function refreshGalleryCategory(catName) {
+  await fetchGalleryRows();
+  renderGalleryCategoryDetail(catName);
+}
+
+async function loadGalleryDashboard() {
+  document.getElementById('galDetail').style.display = 'none';
+  document.getElementById('galDashboard').style.display = 'block';
+  currentGalleryCategory = null;
+
+  const grid = document.getElementById('galCatGrid');
+  grid.innerHTML = '';
+  const ok = await fetchGalleryRows();
+  if (!ok) { grid.innerHTML = '<p class="empty-note">Error loading categories.</p>'; return; }
+
+  const categories = {};
+  allGalleryRows.forEach(row => {
+    const cat = (row.category || '').trim() || 'Uncategorized';
+    if (!categories[cat]) categories[cat] = [];
+    categories[cat].push(row);
   });
+
+  const catNames = Object.keys(categories).sort((a, b) => a.localeCompare(b));
+  if (!catNames.length) {
+    grid.innerHTML = '<p class="empty-note">No categories yet. Add your first project photo to create one.</p>';
+  }
+  catNames.forEach(cat => {
+    const items = categories[cat];
+    const thumb = (items[0] && items[0].image_url) || '';
+    const card = document.createElement('button');
+    card.className = 'cat-card';
+    card.innerHTML = `
+      ${thumb ? `<img src="${thumb}" alt="${cat}" onerror="this.outerHTML='<div class=&quot;ph-fallback&quot;>${cat.charAt(0)}</div>'">` : `<div class="ph-fallback">${cat.charAt(0)}</div>`}
+      <div class="cat-info"><strong>${cat}</strong><span>${items.length} photo${items.length === 1 ? '' : 's'}</span></div>`;
+    card.addEventListener('click', () => openGalleryCategory(cat));
+    grid.appendChild(card);
+  });
+
+  const addTile = document.createElement('button');
+  addTile.className = 'add-cat-card';
+  addTile.textContent = '+ Add Category';
+  addTile.addEventListener('click', () => {
+    const name = prompt('New category name (e.g. "Bedroom Project"):');
+    if (!name || !name.trim()) return;
+    openForm('gallery', null, name.trim());
+  });
+  grid.appendChild(addTile);
+}
+
+function openGalleryCategory(catName) {
+  currentGalleryCategory = catName;
+  document.getElementById('galDashboard').style.display = 'none';
+  document.getElementById('galDetail').style.display = 'block';
+  document.getElementById('editForm').style.display = 'none';
+  renderGalleryCategoryDetail(catName);
+}
+
+function closeGalleryCategory() {
+  loadGalleryDashboard();
+}
+
+function renderGalleryCategoryDetail(catName) {
+  const items = allGalleryRows.filter(r => (r.category || '').trim() === catName || (catName === 'Uncategorized' && !(r.category || '').trim()));
+
+  document.getElementById('galDetailTitle').textContent = catName;
+  document.getElementById('galDetailCount').textContent = `${items.length} photo${items.length === 1 ? '' : 's'}`;
+
+  const grid = document.getElementById('galProductGrid');
+  const emptyEl = document.getElementById('galProductEmpty');
+  grid.innerHTML = '';
+  if (!items.length) { emptyEl.style.display = 'block'; }
+  else {
+    emptyEl.style.display = 'none';
+    items.forEach(item => {
+      const card = document.createElement('div');
+      card.className = 'prod-card';
+      card.innerHTML = `
+        ${item.image_url ? `<img src="${item.image_url}" alt="${item.project_name}" onerror="this.outerHTML='<div class=&quot;ph-fallback&quot;></div>'">` : `<div class="ph-fallback"></div>`}
+        <div class="pbody"><strong>${item.project_name}</strong></div>
+        <div class="pactions">
+          <button class="btn-secondary btn-small" onclick='openForm("gallery", ${JSON.stringify(item)})'>Edit</button>
+          <button class="btn-danger" onclick="deleteGalleryItem(${item.id}, '${item.project_name.replace(/'/g, "\\'")}', '${catName.replace(/'/g, "\\'")}')">Delete</button>
+        </div>`;
+      grid.appendChild(card);
+    });
+  }
+}
+
+document.getElementById('galAddItemBtn').addEventListener('click', () => {
+  openForm('gallery', null, currentGalleryCategory);
+});
+
+async function deleteGalleryItem(id, name, catName) {
+  if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+  const { error } = await sb.from('Gallery').delete().eq('id', id);
+  if (error) { showStatus('Error deleting: ' + error.message); return; }
+  showStatus(`"${name}" deleted.`);
+  await refreshGalleryCategory(catName);
 }
 
 // ---------- TESTIMONIALS ----------
@@ -795,6 +993,7 @@ function openForm(type, item, presetCategory) {
       <h3>${isEdit ? 'Edit' : 'Add New'} Featured Piece</h3>
       <label>Name</label><input id="f_name" value="${item?.name || ''}" placeholder="e.g. Modern Bed">
       <label>Description</label><textarea id="f_description" rows="2">${item?.description || ''}</textarea>
+      <label>Category</label><input id="f_featured_category" value="${item?.category || presetCategory || ''}" placeholder="e.g. Bed, Wardrobe, TV Unit, Dressing Table, Sofa">
       <label>Price (leave blank or type "Enquire for Price")</label><input id="f_price" value="${item?.price || ''}">
       <label>Display Order (number, lower = shows first)</label><input id="f_order" type="number" value="${item?.display_order ?? '1'}">
       <label>Photo</label><input id="f_image" type="file" accept="image/*">
@@ -903,7 +1102,7 @@ async function submitGallery(id, existingImageUrl) {
   if (error) { showStatus('Save failed: ' + error.message); return; }
   showStatus('Saved');
   document.getElementById('editForm').style.display = 'none';
-  loadGallery();
+  loadGalleryDashboard(); // Our Work category view is being finished in a later session — this just prevents a crash for now.
 }
 
 async function submitTestimonial(id) {
