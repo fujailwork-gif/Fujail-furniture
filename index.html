@@ -494,8 +494,26 @@ async function loadCatalog() {
 
 async function loadFeaturedPieces() {
   // "A few favourites" — its own separate table, fully independent of Collections/Categories.
+  // Shown as category tiles (Bed, Wardrobe, TV Unit, Dressing Table, Sofa, …), each
+  // linking to its own detail page listing every piece added to that category.
   const items = await fetchTable('Featured_Products', 'select=*&order=display_order.asc.nullslast');
-  items.forEach(i => prodGrid.appendChild(makeCard(i.name, i.description, i.price || 'Enquire for Price', i.image_url || null)));
+  const categories = {};
+  items.forEach(i => {
+    const cat = (i.category || '').trim() || 'Uncategorized';
+    if (!categories[cat]) categories[cat] = [];
+    categories[cat].push(i);
+  });
+  Object.keys(categories).sort((a, b) => a.localeCompare(b)).forEach(cat => {
+    const group = categories[cat];
+    const thumb = group[0];
+    prodGrid.appendChild(makeCard(
+      cat,
+      `${group.length} piece${group.length === 1 ? '' : 's'} in this category`,
+      null,
+      thumb.image_url || null,
+      `featured-category.html?name=${encodeURIComponent(cat)}`
+    ));
+  });
 }
 
 async function loadGallery() {
