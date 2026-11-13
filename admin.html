@@ -98,6 +98,8 @@
   .upload-status{font-size:.8rem; color:var(--charcoal-soft); margin:-8px 0 14px;}
   .toolbar{display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;}
   .empty-note{color:var(--charcoal-soft); font-size:.88rem; padding:16px 0;}
+  button:disabled{opacity:.4; cursor:default;}
+  .step-num{display:block; font-size:.72rem; letter-spacing:.1em; text-transform:uppercase; color:var(--accent); font-weight:600; margin-bottom:2px;}
   #statusMsg{position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:var(--charcoal); color:#fff; padding:10px 18px; border-radius:30px; font-size:.85rem; display:none; z-index:50;}
 </style>
 </head>
@@ -135,6 +137,7 @@
       <button class="tab-btn" data-tab="testimonials">Testimonials</button>
       <button class="tab-btn" data-tab="settings">Contact Details</button>
       <button class="tab-btn" data-tab="pagecontent">Page Content</button>
+      <button class="tab-btn" data-tab="craftsmanship">Craftsmanship</button>
     </div>
 
     <!-- CATALOG PANEL -->
@@ -240,7 +243,7 @@
     <!-- PAGE CONTENT PANEL -->
     <div class="panel" id="panel-pagecontent">
       <h2>Page Content</h2>
-      <p class="muted" style="margin:6px 0 16px;">Edit the Hero banner, "Who We Are", "Custom Furniture" and "Craftsmanship" sections on the homepage.</p>
+      <p class="muted" style="margin:6px 0 16px;">Edit the Hero banner, "Who We Are" and "Custom Furniture" sections on the homepage. (Craftsmanship now has its own tab.)</p>
 
       <div class="form-box">
         <h3>Hero Banner</h3>
@@ -269,17 +272,26 @@
         <button class="btn-primary btn-small" onclick="savePageBlock('custom_furniture')">Save Custom Furniture</button>
       </div>
 
+    </div>
+
+    <!-- CRAFTSMANSHIP PANEL -->
+    <div class="panel" id="panel-craftsmanship">
+      <h2>Craftsmanship</h2>
+      <p class="muted" style="margin:6px 0 16px;">This is the "From material to finished piece" section on the homepage. Steps show on the website in the same order as below.</p>
+
       <div class="form-box">
-        <h3>Craftsmanship — Intro</h3>
+        <h3>Section Heading &amp; Text</h3>
         <label>Heading</label><input id="pc_craft_heading">
         <label>Text</label><textarea id="pc_craft_body" rows="2"></textarea>
-        <button class="btn-primary btn-small" onclick="savePageBlock('craftsmanship_intro')">Save Craftsmanship Intro</button>
+        <button class="btn-primary btn-small" onclick="savePageBlock('craftsmanship_intro')">Save Heading &amp; Text</button>
       </div>
 
-      <div class="toolbar">
-        <h3 style="margin:0;">Craftsmanship — Steps</h3>
+      <div class="toolbar" style="margin-top:22px;">
+        <h3 style="margin:0;">Steps</h3>
         <button class="btn-primary btn-small" onclick="openStepForm()">+ Add Step</button>
       </div>
+      <p class="muted" style="margin-bottom:12px;">Use the ↑ Up and ↓ Down buttons to change the order. The new order is saved automatically.</p>
+      <div class="form-box" id="stepForm" style="display:none; margin-top:0; margin-bottom:16px;"></div>
       <div class="prod-grid" id="stepsGrid"></div>
       <p class="empty-note" id="stepsEmpty" style="display:none;">No steps added yet.</p>
     </div>
@@ -334,6 +346,7 @@ async function showDashboard(user) {
   loadGalleryDashboard();
   loadTestimonials();
   loadSettings();
+  loadPageContentAdmin();
 }
 
 // Restore session on page load
@@ -350,6 +363,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.classList.add('active');
     document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
     document.getElementById('editForm').style.display = 'none';
+    document.getElementById('stepForm').style.display = 'none';
   });
 });
 
@@ -804,11 +818,19 @@ const PC_FIELD_MAP = {
   craftsmanship_intro: { heading: 'pc_craft_heading', body: 'pc_craft_body' },
 };
 
+let craftSteps = [];
+let stepBusy = false;
+
+function escHtml(v) {
+  return String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
 async function loadPageContentAdmin() {
   const { data, error } = await sb.from('Page_Content').select('*').order('display_order', { ascending: true });
   if (error) { showStatus('Error loading page content: ' + error.message); return; }
+  const rows = data || [];
 
-  (data || []).forEach(row => {
+  rows.forEach(row => {
     const f = PC_FIELD_MAP[row.section];
     if (!f) return;
     if (document.getElementById(f.heading)) document.getElementById(f.heading).value = row.heading || '';
@@ -816,24 +838,63 @@ async function loadPageContentAdmin() {
     if (f.status) document.getElementById(f.status).textContent = row.image_url ? 'Current photo is set. Choose a file to replace it.' : 'No photo set yet.';
   });
 
-  const steps = (data || []).filter(r => r.section === 'craftsmanship_step');
+  craftSteps = rows
+    .filter(r => r.section === 'craftsmanship_step')
+    .sort((a, b) => ((a.display_order ?? 0) - (b.display_order ?? 0)) || (a.id - b.id));
+  renderSteps();
+}
+
+function renderSteps() {
   const grid = document.getElementById('stepsGrid');
   const emptyEl = document.getElementById('stepsEmpty');
   grid.innerHTML = '';
-  if (!steps.length) { emptyEl.style.display = 'block'; return; }
+  if (!craftSteps.length) { emptyEl.style.display = 'block'; return; }
   emptyEl.style.display = 'none';
-  steps.forEach(s => {
+  craftSteps.forEach((s, idx) => {
     const card = document.createElement('div');
     card.className = 'prod-card';
+    const img = s.image_url
+      ? `<img src="${escHtml(s.image_url)}" alt="${escHtml(s.heading)}" onerror="this.outerHTML='<div class=&quot;ph-fallback&quot;></div>'">`
+      : `<div class="ph-fallback"></div>`;
     card.innerHTML = `
-      ${s.image_url ? `<img src="${s.image_url}" alt="${s.heading}">` : `<div class="ph-fallback"></div>`}
-      <div class="pbody"><strong>${s.heading}</strong></div>
+      ${img}
+      <div class="pbody"><span class="step-num">Step ${idx + 1}</span><strong>${escHtml(s.heading) || '(no name)'}</strong></div>
+      <div class="pactions" style="padding-bottom:6px;">
+        <button class="btn-secondary btn-small" ${idx === 0 ? 'disabled' : ''} onclick="moveStep(${s.id}, -1)">↑ Up</button>
+        <button class="btn-secondary btn-small" ${idx === craftSteps.length - 1 ? 'disabled' : ''} onclick="moveStep(${s.id}, 1)">↓ Down</button>
+      </div>
       <div class="pactions">
-        <button class="btn-secondary btn-small" onclick='openStepForm(${JSON.stringify(s)})'>Edit</button>
-        <button class="btn-danger" onclick="deleteRow('Page_Content', ${s.id}, loadPageContentAdmin)">Delete</button>
+        <button class="btn-secondary btn-small" onclick="openStepForm(${s.id})">Edit</button>
+        <button class="btn-danger" onclick="deleteStep(${s.id})">Delete</button>
       </div>`;
     grid.appendChild(card);
   });
+}
+
+// Move a step up/down. Only the "display_order" numbers of steps are changed; nothing is deleted.
+async function moveStep(id, dir) {
+  if (stepBusy) return;
+  const i = craftSteps.findIndex(s => s.id === id);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= craftSteps.length) return;
+  stepBusy = true;
+  const list = craftSteps.slice();
+  [list[i], list[j]] = [list[j], list[i]];
+  try {
+    for (let k = 0; k < list.length; k++) {
+      const newOrder = k + 1;
+      if (list[k].display_order !== newOrder) {
+        const { data, error } = await sb.from('Page_Content').update({ display_order: newOrder }).eq('id', list[k].id).select();
+        if (error) throw error;
+        if (!data || !data.length) throw new Error('not allowed to change this step');
+      }
+    }
+    showStatus('Order saved');
+  } catch (e) {
+    showStatus('Could not change order: ' + e.message);
+  }
+  stepBusy = false;
+  await loadPageContentAdmin();
 }
 
 async function savePageBlock(section) {
@@ -875,41 +936,60 @@ async function savePageBlock(section) {
   loadPageContentAdmin();
 }
 
-function openStepForm(item) {
-  const box = document.getElementById('editForm');
+function openStepForm(id) {
+  const item = id ? craftSteps.find(s => s.id === id) : null;
+  const box = document.getElementById('stepForm');
   box.style.display = 'block';
   box.innerHTML = `
-    <h3>${item ? 'Edit' : 'Add New'} Craftsmanship Step</h3>
-    <label>Step Name</label><input id="f_step_name" value="${item?.heading || ''}" placeholder="e.g. Material Selection">
-    <label>Display Order (number, lower = shows first)</label><input id="f_step_order" type="number" value="${item?.display_order ?? '1'}">
+    <h3>${item ? 'Edit' : 'Add New'} Step</h3>
+    <label>Step Name</label><input id="f_step_name" value="${escHtml(item ? item.heading : '')}" placeholder="e.g. Material Selection">
     <label>Photo (optional)</label><input id="f_step_image" type="file" accept="image/*">
-    <p class="upload-status">${item?.image_url ? 'Current photo is set. Choose a file above to replace it.' : 'No photo set yet — step will show as a plain label.'}</p>
+    <p class="upload-status">${item && item.image_url ? 'Current photo is set. Choose a file above to replace it.' : (item ? 'No photo set yet.' : 'New steps are added at the end. You can move them with ↑ ↓ after saving.')}</p>
     <div style="display:flex; gap:10px;">
-      <button class="btn-primary" onclick="submitStep(${item?.id || 'null'}, '${item?.image_url || ''}')">Save</button>
-      <button class="btn-secondary" onclick="document.getElementById('editForm').style.display='none'">Cancel</button>
+      <button class="btn-primary" onclick="submitStep(${item ? item.id : 'null'})">Save</button>
+      <button class="btn-secondary" onclick="closeStepForm()">Cancel</button>
     </div>`;
-  window.scrollTo({ top: box.offsetTop - 20, behavior: 'smooth' });
+  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
-async function submitStep(id, existingImageUrl) {
+function closeStepForm() {
+  document.getElementById('stepForm').style.display = 'none';
+}
+
+async function submitStep(id) {
+  if (stepBusy) return;
+  const heading = document.getElementById('f_step_name').value.trim();
+  if (!heading) { showStatus('Please enter a step name.'); return; }
+  stepBusy = true;
+  const existing = id ? craftSteps.find(s => s.id === id) : null;
+  let image_url = existing ? (existing.image_url || null) : null;
   const file = document.getElementById('f_step_image').files[0];
-  let image_url = existingImageUrl || null;
   if (file) {
     showStatus('Uploading photo…');
     try { image_url = await uploadImage(file); }
-    catch (e) { showStatus('Image upload failed: ' + e.message); return; }
+    catch (e) { showStatus('Image upload failed: ' + e.message); stepBusy = false; return; }
   }
-  const row = {
-    section: 'craftsmanship_step',
-    heading: document.getElementById('f_step_name').value.trim(),
-    display_order: document.getElementById('f_step_order').value ? Number(document.getElementById('f_step_order').value) : 1,
-    image_url,
-  };
-  const { error } = id ? await sb.from('Page_Content').update(row).eq('id', id) : await sb.from('Page_Content').insert(row);
+  let error;
+  if (id) {
+    ({ error } = await sb.from('Page_Content').update({ heading, image_url }).eq('id', id));
+  } else {
+    const nextOrder = craftSteps.reduce((m, s) => Math.max(m, s.display_order || 0), 0) + 1;
+    ({ error } = await sb.from('Page_Content').insert({ section: 'craftsmanship_step', heading, image_url, display_order: nextOrder }));
+  }
+  stepBusy = false;
   if (error) { showStatus('Save failed: ' + error.message); return; }
   showStatus('Saved');
-  document.getElementById('editForm').style.display = 'none';
-  loadPageContentAdmin();
+  closeStepForm();
+  await loadPageContentAdmin();
+}
+
+async function deleteStep(id) {
+  const item = craftSteps.find(s => s.id === id);
+  if (!confirm(`Delete step "${item ? item.heading : ''}"? This cannot be undone.`)) return;
+  const { error } = await sb.from('Page_Content').delete().eq('id', id);
+  if (error) { showStatus('Error deleting: ' + error.message); return; }
+  showStatus('Step deleted');
+  await loadPageContentAdmin();
 }
 
 // ---------- Delete ----------
