@@ -172,7 +172,7 @@ async function loadProducts() {
     `select=*&section=eq.product&category=ilike.${encodeURIComponent(categoryName.trim())}&order=display_order.asc.nullslast`
   );
   if (!items.length) { emptyEl.style.display = 'block'; return; }
-  items.forEach(i => grid.appendChild(makeCard(i.name, i.description, i.price || 'Enquire for Price', i.image_url || null, `product.html?name=${encodeURIComponent(i.name)}`)));
+  items.forEach(i => grid.appendChild(makeCard(i.name, i.description, i.price || 'Enquire for Price', i.image_url || null, `product.html?id=${encodeURIComponent(i.id)}`)));
 }
 
 async function loadWork() {
