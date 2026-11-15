@@ -382,12 +382,58 @@ async function uploadImage(file) {
   return data.publicUrl;
 }
 
+// ---------- Card builders (safe: all text is escaped, buttons use listeners) ----------
+function makeCatCard(cat, thumb, countText, onClick) {
+  const card = document.createElement('button');
+  card.className = 'cat-card';
+  card.innerHTML = `
+    ${thumb ? `<img src="${esc(thumb)}" alt="${esc(cat)}">` : `<div class="ph-fallback">${esc(cat.charAt(0))}</div>`}
+    <div class="cat-info"><strong>${esc(cat)}</strong><span>${esc(countText)}</span></div>`;
+  const img = card.querySelector('img');
+  if (img) img.addEventListener('error', () => { const d = document.createElement('div'); d.className = 'ph-fallback'; d.textContent = cat.charAt(0); img.replaceWith(d); });
+  card.addEventListener('click', onClick);
+  return card;
+}
+
+function makeItemCard(item, title, subtitle, onEdit, onDelete) {
+  const card = document.createElement('div');
+  card.className = 'prod-card';
+  card.innerHTML = `
+    ${item.image_url ? `<img src="${esc(item.image_url)}" alt="${esc(title)}">` : `<div class="ph-fallback"></div>`}
+    <div class="pbody"><strong>${esc(title)}</strong>${subtitle ? `<span class="price">${esc(subtitle)}</span>` : ''}</div>
+    <div class="pactions">
+      <button class="btn-secondary btn-small" data-act="edit">Edit</button>
+      <button class="btn-danger" data-act="delete">Delete</button>
+    </div>`;
+  const img = card.querySelector('img');
+  if (img) img.addEventListener('error', () => { const d = document.createElement('div'); d.className = 'ph-fallback'; img.replaceWith(d); });
+  card.querySelector('[data-act="edit"]').addEventListener('click', onEdit);
+  card.querySelector('[data-act="delete"]').addEventListener('click', onDelete);
+  return card;
+}
+
+function makeAddCategoryTile(promptText, onName) {
+  const addTile = document.createElement('button');
+  addTile.className = 'add-cat-card';
+  addTile.textContent = '+ Add Category';
+  addTile.addEventListener('click', () => {
+    const name = prompt(promptText);
+    if (!name || !name.trim()) return;
+    onName(name.trim());
+  });
+  return addTile;
+}
+
+function inCategory(r, catName) {
+  const c = (r.category || '').trim();
+  return c === catName || (catName === 'Uncategorized' && !c);
+}
+
 // ---------- CATALOG (Product table) — category dashboard ----------
 let allProductRows = [];
 let currentCategoryName = null;
 
 async function loadCatalog() {
-  // Kept for compatibility: refreshes the cached data and shows the dashboard.
   await loadCatalogDashboard();
 }
 
@@ -413,8 +459,7 @@ async function loadCatalogDashboard() {
   const ok = await fetchProductRows();
   if (!ok) { grid.innerHTML = '<p class="empty-note">Error loading categories.</p>'; return; }
 
-  // Group rows by category. Each category may have one "collection" row
-  // (the homepage card) plus any number of "product" rows.
+  // Each category may have one "collection" row (the homepage card) plus any number of "product" rows.
   const categories = {};
   allProductRows.forEach(row => {
     const cat = (row.category || '').trim() || 'Uncategorized';
@@ -424,31 +469,14 @@ async function loadCatalogDashboard() {
   });
 
   const catNames = Object.keys(categories).sort((a, b) => a.localeCompare(b));
-  if (!catNames.length) {
-    grid.innerHTML = '<p class="empty-note">No categories yet. Add your first product to create one.</p>';
-  }
+  if (!catNames.length) grid.innerHTML = '<p class="empty-note">No categories yet. Add your first product to create one.</p>';
   catNames.forEach(cat => {
     const info = categories[cat];
     const thumb = (info.collectionRow && info.collectionRow.image_url) || (info.products[0] && info.products[0].image_url) || '';
-    const card = document.createElement('button');
-    card.className = 'cat-card';
-    card.innerHTML = `
-      ${thumb ? `<img src="${thumb}" alt="${cat}" onerror="this.outerHTML='<div class=&quot;ph-fallback&quot;>${cat.charAt(0)}</div>'">` : `<div class="ph-fallback">${cat.charAt(0)}</div>`}
-      <div class="cat-info"><strong>${cat}</strong><span>${info.products.length} product${info.products.length === 1 ? '' : 's'}</span></div>`;
-    card.addEventListener('click', () => openCategory(cat));
-    grid.appendChild(card);
+    const n = info.products.length;
+    grid.appendChild(makeCatCard(cat, thumb, `${n} product${n === 1 ? '' : 's'}`, () => openCategory(cat)));
   });
-
-  // "+ Add Category" tile — creates the first product in a brand-new category.
-  const addTile = document.createElement('button');
-  addTile.className = 'add-cat-card';
-  addTile.textContent = '+ Add Category';
-  addTile.addEventListener('click', () => {
-    const name = prompt('New category name (e.g. "Outdoor Furniture"):');
-    if (!name || !name.trim()) return;
-    openForm('catalog', null, name.trim());
-  });
-  grid.appendChild(addTile);
+  grid.appendChild(makeAddCategoryTile('New category name (e.g. "Outdoor Furniture"):', name => openForm('catalog', null, name)));
 }
 
 function openCategory(catName) {
@@ -464,52 +492,42 @@ function closeCategory() {
 }
 
 function renderCategoryDetail(catName) {
-  const rows = allProductRows.filter(r => (r.category || '').trim() === catName || (catName === 'Uncategorized' && !(r.category || '').trim()));
+  const rows = allProductRows.filter(r => inCategory(r, catName));
   const collectionRow = rows.find(r => r.section === 'collection');
   const products = rows.filter(r => r.section === 'product');
 
   document.getElementById('catDetailTitle').textContent = catName;
   document.getElementById('catDetailCount').textContent = `${products.length} product${products.length === 1 ? '' : 's'}`;
 
-  // Homepage collection card (only shown if this category has one)
   const collBox = document.getElementById('collectionCardBox');
+  collBox.innerHTML = '';
   if (collectionRow) {
-    collBox.innerHTML = `
-      <div class="collection-card-box">
-        <img src="${collectionRow.image_url || ''}" onerror="this.style.visibility='hidden'">
-        <div class="info" style="flex:1;">
-          <strong>Homepage Collection Card</strong>
-          <span class="muted" style="font-size:.8rem;">This is the "${catName}" card customers see on the homepage.</span>
-        </div>
-        <button class="btn-secondary btn-small" onclick='openForm("catalog", ${JSON.stringify(collectionRow)})'>Edit</button>
-      </div>`;
+    const box = document.createElement('div');
+    box.className = 'collection-card-box';
+    box.innerHTML = `
+      <img src="${esc(collectionRow.image_url || '')}" alt="">
+      <div class="info" style="flex:1;">
+        <strong>Homepage Collection Card</strong>
+        <span class="muted" style="font-size:.8rem;">This is the "${esc(catName)}" card customers see on the homepage.</span>
+      </div>
+      <button class="btn-secondary btn-small">Edit</button>`;
+    const img = box.querySelector('img');
+    img.addEventListener('error', () => { img.style.visibility = 'hidden'; });
+    box.querySelector('button').addEventListener('click', () => openForm('catalog', collectionRow));
+    collBox.appendChild(box);
   } else {
     collBox.innerHTML = `<p class="muted" style="margin-bottom:16px; font-size:.82rem;">This category has no homepage collection card yet — it only appears here in the admin panel.</p>`;
   }
 
-  // Products grid
   const grid = document.getElementById('catProductGrid');
   const emptyEl = document.getElementById('catProductEmpty');
   grid.innerHTML = '';
-  if (!products.length) { emptyEl.style.display = 'block'; }
-  else {
-    emptyEl.style.display = 'none';
-    products.forEach(item => {
-      const card = document.createElement('div');
-      card.className = 'prod-card';
-      card.innerHTML = `
-        ${item.image_url ? `<img src="${item.image_url}" alt="${item.name}" onerror="this.outerHTML='<div class=&quot;ph-fallback&quot;></div>'">` : `<div class="ph-fallback"></div>`}
-        <div class="pbody">
-          <strong>${item.name}</strong>
-          <span class="price">${item.price || 'Enquire for Price'}</span>
-        </div>
-        <div class="pactions">
-          <button class="btn-secondary btn-small" onclick='openForm("catalog", ${JSON.stringify(item)})'>Edit</button>
-          <button class="btn-danger" onclick="deleteCatalogProduct(${item.id}, '${item.name.replace(/'/g, "\\'")}', '${catName.replace(/'/g, "\\'")}')">Delete</button>
-        </div>`;
-      grid.appendChild(card);
-    });
-  }
+  emptyEl.style.display = products.length ? 'none' : 'block';
+  products.forEach(item => grid.appendChild(makeItemCard(
+    item, item.name, item.price || 'Enquire for Price',
+    () => openForm('catalog', item),
+    () => deleteCatalogProduct(item.id, item.name, catName)
+  )));
 }
 
 document.getElementById('catAddProductBtn').addEventListener('click', () => {
@@ -550,30 +568,13 @@ async function loadFeaturedDashboard() {
   });
 
   const catNames = Object.keys(categories).sort((a, b) => a.localeCompare(b));
-  if (!catNames.length) {
-    grid.innerHTML = '<p class="empty-note">No categories yet. Add your first piece to create one.</p>';
-  }
+  if (!catNames.length) grid.innerHTML = '<p class="empty-note">No categories yet. Add your first piece to create one.</p>';
   catNames.forEach(cat => {
     const items = categories[cat];
-    const thumb = (items[0] && items[0].image_url) || '';
-    const card = document.createElement('button');
-    card.className = 'cat-card';
-    card.innerHTML = `
-      ${thumb ? `<img src="${thumb}" alt="${cat}" onerror="this.outerHTML='<div class=&quot;ph-fallback&quot;>${cat.charAt(0)}</div>'">` : `<div class="ph-fallback">${cat.charAt(0)}</div>`}
-      <div class="cat-info"><strong>${cat}</strong><span>${items.length} piece${items.length === 1 ? '' : 's'}</span></div>`;
-    card.addEventListener('click', () => openFeaturedCategory(cat));
-    grid.appendChild(card);
+    const n = items.length;
+    grid.appendChild(makeCatCard(cat, (items[0] && items[0].image_url) || '', `${n} piece${n === 1 ? '' : 's'}`, () => openFeaturedCategory(cat)));
   });
-
-  const addTile = document.createElement('button');
-  addTile.className = 'add-cat-card';
-  addTile.textContent = '+ Add Category';
-  addTile.addEventListener('click', () => {
-    const name = prompt('New category name (e.g. "Sofa"):');
-    if (!name || !name.trim()) return;
-    openForm('featured', null, name.trim());
-  });
-  grid.appendChild(addTile);
+  grid.appendChild(makeAddCategoryTile('New category name (e.g. "Sofa"):', name => openForm('featured', null, name)));
 }
 
 function openFeaturedCategory(catName) {
@@ -589,72 +590,24 @@ function closeFeaturedCategory() {
 }
 
 function renderFeaturedCategoryDetail(catName) {
-  const items = allFeaturedRows.filter(r => (r.category || '').trim() === catName || (catName === 'Uncategorized' && !(r.category || '').trim()));
-
+  const items = allFeaturedRows.filter(r => inCategory(r, catName));
   document.getElementById('featDetailTitle').textContent = catName;
   document.getElementById('featDetailCount').textContent = `${items.length} piece${items.length === 1 ? '' : 's'}`;
 
   const grid = document.getElementById('featProductGrid');
   const emptyEl = document.getElementById('featProductEmpty');
   grid.innerHTML = '';
-  if (!items.length) { emptyEl.style.display = 'block'; }
-  else {
-    emptyEl.style.display = 'none';
-    items.forEach(item => {
-      const card = document.createElement('div');
-      card.className = 'prod-card';
-      card.innerHTML = `
-        ${item.image_url ? `<img src="${item.image_url}" alt="${item.name}" onerror="this.outerHTML='<div class=&quot;ph-fallback&quot;></div>'">` : `<div class="ph-fallback"></div>`}
-        <div class="pbody">
-          <strong>${item.name}</strong>
-          <span class="price">${item.price || 'Enquire for Price'}</span>
-        </div>
-        <div class="pactions">
-          <button class="btn-secondary btn-small" onclick='openForm("featured", ${JSON.stringify(item)})'>Edit</button>
-          <button class="btn-danger" onclick="deleteFeaturedProduct(${item.id}, '${item.name.replace(/'/g, "\\'")}', '${catName.replace(/'/g, "\\'")}')">Delete</button>
-        </div>`;
-      grid.appendChild(card);
-    });
-  }
+  emptyEl.style.display = items.length ? 'none' : 'block';
+  items.forEach(item => grid.appendChild(makeItemCard(
+    item, item.name, item.price || 'Enquire for Price',
+    () => openForm('featured', item),
+    () => deleteFeaturedProduct(item.id, item.name, catName)
+  )));
 }
 
 document.getElementById('featAddItemBtn').addEventListener('click', () => {
   openForm('featured', null, currentFeaturedCategory);
 });
-
-async function deleteFeaturedProduct(id, name, catName) {
-  if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
-  const { error } = await sb.from('Featured_Products').delete().eq('id', id);
-  if (error) { showStatus('Error deleting: ' + error.message); return; }
-  showStatus(`"${name}" deleted.`);
-  await refreshFeaturedCategory(catName);
-}
-
-async function submitFeatured(id, existingImageUrl) {
-  const file = document.getElementById('f_image').files[0];
-  let image_url = existingImageUrl;
-  if (file) {
-    showStatus('Uploading photo…');
-    try { image_url = await uploadImage(file); }
-    catch (e) { showStatus('Image upload failed: ' + e.message); return; }
-  }
-  const category = document.getElementById('f_featured_category').value.trim() || currentFeaturedCategory || null;
-  const row = {
-    name: document.getElementById('f_name').value.trim(),
-    description: document.getElementById('f_description').value.trim(),
-    category,
-    price: document.getElementById('f_price').value.trim(),
-    display_order: document.getElementById('f_order').value ? Number(document.getElementById('f_order').value) : null,
-    image_url,
-  };
-  const { error } = id
-    ? await sb.from('Featured_Products').update(row).eq('id', id)
-    : await sb.from('Featured_Products').insert(row);
-  if (error) { showStatus('Save failed: ' + error.message); return; }
-  showStatus('Saved');
-  document.getElementById('editForm').style.display = 'none';
-  await refreshFeaturedCategory(category);
-}
 
 // ---------- OUR WORK (Gallery) — category dashboard ----------
 let allGalleryRows = [];
@@ -690,30 +643,13 @@ async function loadGalleryDashboard() {
   });
 
   const catNames = Object.keys(categories).sort((a, b) => a.localeCompare(b));
-  if (!catNames.length) {
-    grid.innerHTML = '<p class="empty-note">No categories yet. Add your first project photo to create one.</p>';
-  }
+  if (!catNames.length) grid.innerHTML = '<p class="empty-note">No categories yet. Add your first project photo to create one.</p>';
   catNames.forEach(cat => {
     const items = categories[cat];
-    const thumb = (items[0] && items[0].image_url) || '';
-    const card = document.createElement('button');
-    card.className = 'cat-card';
-    card.innerHTML = `
-      ${thumb ? `<img src="${thumb}" alt="${cat}" onerror="this.outerHTML='<div class=&quot;ph-fallback&quot;>${cat.charAt(0)}</div>'">` : `<div class="ph-fallback">${cat.charAt(0)}</div>`}
-      <div class="cat-info"><strong>${cat}</strong><span>${items.length} photo${items.length === 1 ? '' : 's'}</span></div>`;
-    card.addEventListener('click', () => openGalleryCategory(cat));
-    grid.appendChild(card);
+    const n = items.length;
+    grid.appendChild(makeCatCard(cat, (items[0] && items[0].image_url) || '', `${n} photo${n === 1 ? '' : 's'}`, () => openGalleryCategory(cat)));
   });
-
-  const addTile = document.createElement('button');
-  addTile.className = 'add-cat-card';
-  addTile.textContent = '+ Add Category';
-  addTile.addEventListener('click', () => {
-    const name = prompt('New category name (e.g. "Bedroom Project"):');
-    if (!name || !name.trim()) return;
-    openForm('gallery', null, name.trim());
-  });
-  grid.appendChild(addTile);
+  grid.appendChild(makeAddCategoryTile('New category name (e.g. "Bedroom Project"):', name => openForm('gallery', null, name)));
 }
 
 function openGalleryCategory(catName) {
@@ -729,60 +665,43 @@ function closeGalleryCategory() {
 }
 
 function renderGalleryCategoryDetail(catName) {
-  const items = allGalleryRows.filter(r => (r.category || '').trim() === catName || (catName === 'Uncategorized' && !(r.category || '').trim()));
-
+  const items = allGalleryRows.filter(r => inCategory(r, catName));
   document.getElementById('galDetailTitle').textContent = catName;
   document.getElementById('galDetailCount').textContent = `${items.length} photo${items.length === 1 ? '' : 's'}`;
 
   const grid = document.getElementById('galProductGrid');
   const emptyEl = document.getElementById('galProductEmpty');
   grid.innerHTML = '';
-  if (!items.length) { emptyEl.style.display = 'block'; }
-  else {
-    emptyEl.style.display = 'none';
-    items.forEach(item => {
-      const card = document.createElement('div');
-      card.className = 'prod-card';
-      card.innerHTML = `
-        ${item.image_url ? `<img src="${item.image_url}" alt="${item.project_name}" onerror="this.outerHTML='<div class=&quot;ph-fallback&quot;></div>'">` : `<div class="ph-fallback"></div>`}
-        <div class="pbody"><strong>${item.project_name}</strong></div>
-        <div class="pactions">
-          <button class="btn-secondary btn-small" onclick='openForm("gallery", ${JSON.stringify(item)})'>Edit</button>
-          <button class="btn-danger" onclick="deleteGalleryItem(${item.id}, '${item.project_name.replace(/'/g, "\\'")}', '${catName.replace(/'/g, "\\'")}')">Delete</button>
-        </div>`;
-      grid.appendChild(card);
-    });
-  }
+  emptyEl.style.display = items.length ? 'none' : 'block';
+  items.forEach(item => grid.appendChild(makeItemCard(
+    item, item.project_name, null,
+    () => openForm('gallery', item),
+    () => deleteGalleryItem(item.id, item.project_name, catName)
+  )));
 }
 
 document.getElementById('galAddItemBtn').addEventListener('click', () => {
   openForm('gallery', null, currentGalleryCategory);
 });
 
-async function deleteGalleryItem(id, name, catName) {
-  if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
-  const { error } = await sb.from('Gallery').delete().eq('id', id);
-  if (error) { showStatus('Error deleting: ' + error.message); return; }
-  showStatus(`"${name}" deleted.`);
-  await refreshGalleryCategory(catName);
-}
-
 // ---------- TESTIMONIALS ----------
 async function loadTestimonials() {
   const { data, error } = await sb.from('Testimonials').select('*');
   const list = document.getElementById('testimonialsList');
   list.innerHTML = '';
-  if (error) { list.innerHTML = `<p class="empty-note">Error loading: ${error.message}</p>`; return; }
+  if (error) { list.innerHTML = `<p class="empty-note">Error loading: ${esc(error.message)}</p>`; return; }
   if (!data.length) { list.innerHTML = '<p class="empty-note">No testimonials yet.</p>'; return; }
   data.forEach(item => {
     const row = document.createElement('div');
     row.className = 'card-row';
     row.innerHTML = `
-      <div class="info"><strong>${item.customer_name}</strong><span>${item.review_text}</span></div>
+      <div class="info"><strong>${esc(item.customer_name)}</strong><span>${esc(item.review_text)}</span></div>
       <div class="actions">
-        <button class="btn-secondary btn-small" onclick='openForm("testimonials", ${JSON.stringify(item)})'>Edit</button>
-        <button class="btn-danger" onclick="deleteRow('Testimonials', ${item.id}, loadTestimonials)">Delete</button>
+        <button class="btn-secondary btn-small" data-act="edit">Edit</button>
+        <button class="btn-danger" data-act="delete">Delete</button>
       </div>`;
+    row.querySelector('[data-act="edit"]').addEventListener('click', () => openForm('testimonials', item));
+    row.querySelector('[data-act="delete"]').addEventListener('click', () => deleteRow('Testimonials', item.id, loadTestimonials));
     list.appendChild(row);
   });
 }
@@ -986,9 +905,7 @@ async function deleteRow(table, id, reload) {
   reload();
 }
 
-// Delete a single product from within a category view. Shows the product's
-// own name in the confirmation, and only removes that one row — the category
-// itself and every other product are untouched.
+// Each of these removes only the single row that was tapped. The category and every other item are untouched.
 async function deleteCatalogProduct(id, name, catName) {
   if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
   const { error } = await sb.from('Product').delete().eq('id', id);
@@ -997,124 +914,155 @@ async function deleteCatalogProduct(id, name, catName) {
   await refreshCategory(catName);
 }
 
+async function deleteFeaturedProduct(id, name, catName) {
+  if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+  const { error } = await sb.from('Featured_Products').delete().eq('id', id);
+  if (error) { showStatus('Error deleting: ' + error.message); return; }
+  showStatus(`"${name}" deleted.`);
+  await refreshFeaturedCategory(catName);
+}
+
+async function deleteGalleryItem(id, name, catName) {
+  if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+  const { error } = await sb.from('Gallery').delete().eq('id', id);
+  if (error) { showStatus('Error deleting: ' + error.message); return; }
+  showStatus(`"${name}" deleted.`);
+  await refreshGalleryCategory(catName);
+}
+
+// ---------- Category field (dropdown of existing categories, or a new one) ----------
+function categoryFieldHtml(rows, selectedCategory) {
+  const existing = [...new Set(rows.map(r => (r.category || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const showsNew = !!selectedCategory && !existing.includes(selectedCategory);
+  const opts = existing.map(c => `<option value="${esc(c)}" ${c === selectedCategory ? 'selected' : ''}>${esc(c)}</option>`).join('');
+  return `
+    <label>Category</label>
+    <select id="f_category_select" onchange="document.getElementById('f_category_new').style.display = this.value === '__new__' ? 'block' : 'none'">
+      <option value="">Select category…</option>
+      ${opts}
+      <option value="__new__" ${showsNew ? 'selected' : ''}>+ New category…</option>
+    </select>
+    <input id="f_category_new" placeholder="New category name" value="${showsNew ? esc(selectedCategory) : ''}" style="display:${showsNew ? 'block' : 'none'};">`;
+}
+
+// Reads the chosen category. If the typed name matches an existing one (ignoring capital/small
+// letters), the existing spelling is used, so "bed" and "Bed" never become two categories.
+function readCategoryField(rows) {
+  const sel = document.getElementById('f_category_select').value;
+  const typed = (sel === '__new__' ? document.getElementById('f_category_new').value : sel).trim();
+  if (!typed) return '';
+  const match = rows.map(r => (r.category || '').trim()).find(c => c && c.toLowerCase() === typed.toLowerCase());
+  return match || typed;
+}
+
 // ---------- Shared Add/Edit form ----------
 function openForm(type, item, presetCategory) {
   const box = document.getElementById('editForm');
   box.style.display = 'block';
   box.scrollIntoView({ behavior: 'smooth' });
   const isEdit = !!item;
+  const preset = presetCategory && presetCategory !== 'Uncategorized' ? presetCategory : '';
+  const cancelBtn = `<button class="btn-secondary" onclick="document.getElementById('editForm').style.display='none'">Cancel</button>`;
+  const photoNote = `<p class="upload-status">${item?.image_url ? 'Current photo is set. Choose a file above to replace it.' : 'No photo set yet.'}</p>`;
 
   if (type === 'catalog') {
     // Editing the homepage "collection card" itself — simplified form, category/section locked.
     if (item && item.section === 'collection') {
       box.innerHTML = `
-        <h3>Edit Homepage Collection Card — ${item.name}</h3>
-        <p class="muted" style="margin-bottom:10px;">This is the card customers see on the homepage "Furniture for every room" section. The name and category stay locked to "${item.category}".</p>
-        <label>Description</label><textarea id="f_description" rows="2">${item.description || ''}</textarea>
+        <h3>Edit Homepage Collection Card — ${esc(item.name)}</h3>
+        <p class="muted" style="margin-bottom:10px;">This is the card customers see on the homepage "Furniture for every room" section. The name and category stay locked to "${esc(item.category)}".</p>
+        <label>Description</label><textarea id="f_description" rows="2">${esc(item.description)}</textarea>
         <label>Photo</label><input id="f_image" type="file" accept="image/*">
-        <p class="upload-status">${item.image_url ? 'Current photo is set. Choose a file above to replace it.' : 'No photo set yet.'}</p>
+        ${photoNote}
         <div style="display:flex; gap:10px;">
-          <button class="btn-primary" onclick="submitCollectionCard(${item.id}, '${item.image_url || ''}')">Save</button>
-          <button class="btn-secondary" onclick="document.getElementById('editForm').style.display='none'">Cancel</button>
+          <button class="btn-primary" onclick="submitCollectionCard(${item.id})">Save</button>
+          ${cancelBtn}
         </div>`;
       return;
     }
-
-    // Adding or editing a product.
-    const existingCategories = [...new Set(allProductRows.map(r => (r.category || '').trim()).filter(Boolean))].sort();
-    const selectedCategory = item?.category || presetCategory || '';
-    const categoryOptions = existingCategories.map(c =>
-      `<option value="${c}" ${c === selectedCategory ? 'selected' : ''}>${c}</option>`
-    ).join('');
-    const showsNewCategoryInput = selectedCategory && !existingCategories.includes(selectedCategory);
-
     box.innerHTML = `
       <h3>${isEdit ? 'Edit' : 'Add New'} Product</h3>
-      <label>Name</label><input id="f_name" value="${item?.name || ''}" placeholder="e.g. Modern Bed">
-      <label>Description</label><textarea id="f_description" rows="2">${item?.description || ''}</textarea>
+      <label>Name</label><input id="f_name" value="${esc(item?.name)}" placeholder="e.g. Modern Bed">
+      <label>Description</label><textarea id="f_description" rows="2">${esc(item?.description)}</textarea>
       <div class="form-row cols-2">
-        <div>
-          <label>Category</label>
-          <select id="f_category_select" onchange="document.getElementById('f_category_new').style.display = this.value === '__new__' ? 'block' : 'none'">
-            <option value="">Select category…</option>
-            ${categoryOptions}
-            <option value="__new__" ${showsNewCategoryInput ? 'selected' : ''}>+ New category…</option>
-          </select>
-          <input id="f_category_new" placeholder="New category name" value="${showsNewCategoryInput ? selectedCategory : ''}" style="display:${showsNewCategoryInput ? 'block' : 'none'};">
-        </div>
-        <div><label>Price (leave blank or type "Enquire for Price")</label><input id="f_price" value="${item?.price || ''}"></div>
+        <div>${categoryFieldHtml(allProductRows, item?.category || preset)}</div>
+        <div><label>Price (leave blank or type "Enquire for Price")</label><input id="f_price" value="${esc(item?.price)}"></div>
       </div>
-      <label>Display Order (number, lower = shows first)</label><input id="f_order" type="number" value="${item?.display_order ?? '1'}">
+      <label>Display Order (number, lower = shows first)</label><input id="f_order" type="number" value="${esc(item?.display_order ?? '1')}">
       <label>Photo</label><input id="f_image" type="file" accept="image/*">
-      <p class="upload-status" id="f_upload_status">${item?.image_url ? 'Current photo is set. Choose a file above to replace it.' : 'No photo set yet.'}</p>
+      ${photoNote}
       <div style="display:flex; gap:10px;">
-        <button class="btn-primary" onclick="submitCatalog(${item?.id || 'null'}, '${item?.image_url || ''}')">Save</button>
-        <button class="btn-secondary" onclick="document.getElementById('editForm').style.display='none'">Cancel</button>
+        <button class="btn-primary" onclick="submitCatalog(${item?.id || 'null'})">Save</button>
+        ${cancelBtn}
       </div>`;
   }
 
   if (type === 'featured') {
     box.innerHTML = `
       <h3>${isEdit ? 'Edit' : 'Add New'} Featured Piece</h3>
-      <label>Name</label><input id="f_name" value="${item?.name || ''}" placeholder="e.g. Modern Bed">
-      <label>Description</label><textarea id="f_description" rows="2">${item?.description || ''}</textarea>
-      <label>Category</label><input id="f_featured_category" value="${item?.category || presetCategory || ''}" placeholder="e.g. Bed, Wardrobe, TV Unit, Dressing Table, Sofa">
-      <label>Price (leave blank or type "Enquire for Price")</label><input id="f_price" value="${item?.price || ''}">
-      <label>Display Order (number, lower = shows first)</label><input id="f_order" type="number" value="${item?.display_order ?? '1'}">
+      <label>Name</label><input id="f_name" value="${esc(item?.name)}" placeholder="e.g. Modern Bed">
+      <label>Description</label><textarea id="f_description" rows="2">${esc(item?.description)}</textarea>
+      ${categoryFieldHtml(allFeaturedRows, item?.category || preset)}
+      <label>Price (leave blank or type "Enquire for Price")</label><input id="f_price" value="${esc(item?.price)}">
+      <label>Display Order (number, lower = shows first)</label><input id="f_order" type="number" value="${esc(item?.display_order ?? '1')}">
       <label>Photo</label><input id="f_image" type="file" accept="image/*">
-      <p class="upload-status">${item?.image_url ? 'Current photo is set. Choose a file above to replace it.' : 'No photo set yet.'}</p>
+      ${photoNote}
       <div style="display:flex; gap:10px;">
-        <button class="btn-primary" onclick="submitFeatured(${item?.id || 'null'}, '${item?.image_url || ''}')">Save</button>
-        <button class="btn-secondary" onclick="document.getElementById('editForm').style.display='none'">Cancel</button>
+        <button class="btn-primary" onclick="submitFeatured(${item?.id || 'null'})">Save</button>
+        ${cancelBtn}
       </div>`;
   }
 
   if (type === 'gallery') {
     box.innerHTML = `
       <h3>${isEdit ? 'Edit' : 'Add'} Project</h3>
-      <label>Project Name</label><input id="f_name" value="${item?.project_name || ''}">
-      <label>Description</label><textarea id="f_description" rows="2">${item?.description || ''}</textarea>
-      <label>Category</label><input id="f_category" value="${item?.category || ''}">
+      <label>Project Name</label><input id="f_name" value="${esc(item?.project_name)}">
+      <label>Description</label><textarea id="f_description" rows="2">${esc(item?.description)}</textarea>
+      ${categoryFieldHtml(allGalleryRows, item?.category || preset)}
       <label>Photo</label><input id="f_image" type="file" accept="image/*">
-      <p class="upload-status">${item?.image_url ? 'Current photo is set. Choose a file above to replace it.' : 'No photo set yet.'}</p>
+      ${photoNote}
       <div style="display:flex; gap:10px;">
-        <button class="btn-primary" onclick="submitGallery(${item?.id || 'null'}, '${item?.image_url || ''}')">Save</button>
-        <button class="btn-secondary" onclick="document.getElementById('editForm').style.display='none'">Cancel</button>
+        <button class="btn-primary" onclick="submitGallery(${item?.id || 'null'})">Save</button>
+        ${cancelBtn}
       </div>`;
   }
 
   if (type === 'testimonials') {
     box.innerHTML = `
       <h3>${isEdit ? 'Edit' : 'Add'} Testimonial</h3>
-      <label>Customer Name</label><input id="f_name" value="${item?.customer_name || ''}">
-      <label>Review Text</label><textarea id="f_review" rows="3">${item?.review_text || ''}</textarea>
-      <label>Project Type (optional)</label><input id="f_project_type" value="${item?.project_type || ''}">
+      <label>Customer Name</label><input id="f_name" value="${esc(item?.customer_name)}">
+      <label>Review Text</label><textarea id="f_review" rows="3">${esc(item?.review_text)}</textarea>
+      <label>Project Type (optional)</label><input id="f_project_type" value="${esc(item?.project_type)}">
       <div style="display:flex; gap:10px;">
         <button class="btn-primary" onclick="submitTestimonial(${item?.id || 'null'})">Save</button>
-        <button class="btn-secondary" onclick="document.getElementById('editForm').style.display='none'">Cancel</button>
+        ${cancelBtn}
       </div>`;
   }
 }
 
-async function submitCatalog(id, existingImageUrl) {
+// Uploads the chosen photo (if any); otherwise keeps the existing one. Returns null if the upload failed.
+async function pickImageUrl(existingUrl) {
   const file = document.getElementById('f_image').files[0];
-  let image_url = existingImageUrl;
-  if (file) {
-    showStatus('Uploading photo…');
-    try { image_url = await uploadImage(file); }
-    catch (e) { showStatus('Image upload failed: ' + e.message); return; }
-  }
-  const categorySelect = document.getElementById('f_category_select').value;
-  const category = categorySelect === '__new__'
-    ? document.getElementById('f_category_new').value.trim()
-    : categorySelect.trim();
+  if (!file) return existingUrl || '';
+  showStatus('Uploading photo…');
+  try { return await uploadImage(file); }
+  catch (e) { showStatus('Image upload failed: ' + e.message); return null; }
+}
+
+async function submitCatalog(id) {
+  const existing = id ? allProductRows.find(r => r.id === id) : null;
+  const name = document.getElementById('f_name').value.trim();
+  if (!name) { showStatus('Please type the product name.'); return; }
+  const category = readCategoryField(allProductRows);
   if (!category) { showStatus('Please choose or enter a category.'); return; }
+  const image_url = await pickImageUrl(existing?.image_url);
+  if (image_url === null) return;
 
   const row = {
-    name: document.getElementById('f_name').value.trim(),
+    name,
     description: document.getElementById('f_description').value.trim(),
     section: 'product', // this form only ever adds/edits individual products; homepage collection cards use submitCollectionCard
-    category: category,
+    category,
     price: document.getElementById('f_price').value.trim(),
     display_order: document.getElementById('f_order').value ? Number(document.getElementById('f_order').value) : null,
     image_url,
@@ -1123,51 +1071,67 @@ async function submitCatalog(id, existingImageUrl) {
   if (error) { showStatus('Save failed: ' + error.message); return; }
   showStatus('Saved');
   document.getElementById('editForm').style.display = 'none';
-  await refreshCategory(category);
+  await fetchProductRows();
+  openCategory(category);
 }
 
-// Saves edits to a homepage "collection" card (the Bedroom/Living Room/etc.
-// cards customers see on the public homepage). Only description and photo
-// are editable here — name, category and section stay exactly as they are,
-// so this never creates a duplicate or disturbs the products inside it.
-async function submitCollectionCard(id, existingImageUrl) {
-  const file = document.getElementById('f_image').files[0];
-  let image_url = existingImageUrl;
-  if (file) {
-    showStatus('Uploading photo…');
-    try { image_url = await uploadImage(file); }
-    catch (e) { showStatus('Image upload failed: ' + e.message); return; }
-  }
-  const row = {
-    description: document.getElementById('f_description').value.trim(),
-    image_url,
-  };
+// Saves edits to a homepage "collection" card. Only description and photo change — name,
+// category and section stay exactly as they are, so no duplicate is created.
+async function submitCollectionCard(id) {
+  const existing = allProductRows.find(r => r.id === id);
+  const image_url = await pickImageUrl(existing?.image_url);
+  if (image_url === null) return;
+  const row = { description: document.getElementById('f_description').value.trim(), image_url };
   const { error } = await sb.from('Product').update(row).eq('id', id);
   if (error) { showStatus('Save failed: ' + error.message); return; }
   showStatus('Saved');
   document.getElementById('editForm').style.display = 'none';
-  await refreshCategory(currentCategoryName);
+  await fetchProductRows();
+  openCategory(currentCategoryName || (existing?.category || '').trim() || 'Uncategorized');
 }
 
-async function submitGallery(id, existingImageUrl) {
-  const file = document.getElementById('f_image').files[0];
-  let image_url = existingImageUrl;
-  if (file) {
-    showStatus('Uploading photo…');
-    try { image_url = await uploadImage(file); }
-    catch (e) { showStatus('Image upload failed: ' + e.message); return; }
-  }
+async function submitFeatured(id) {
+  const existing = id ? allFeaturedRows.find(r => r.id === id) : null;
+  const name = document.getElementById('f_name').value.trim();
+  if (!name) { showStatus('Please type the piece name.'); return; }
+  const category = readCategoryField(allFeaturedRows);
+  const image_url = await pickImageUrl(existing?.image_url);
+  if (image_url === null) return;
   const row = {
-    project_name: document.getElementById('f_name').value.trim(),
+    name,
     description: document.getElementById('f_description').value.trim(),
-    category: document.getElementById('f_category').value.trim(),
+    category: category || null,
+    price: document.getElementById('f_price').value.trim(),
+    display_order: document.getElementById('f_order').value ? Number(document.getElementById('f_order').value) : null,
+    image_url,
+  };
+  const { error } = id ? await sb.from('Featured_Products').update(row).eq('id', id) : await sb.from('Featured_Products').insert(row);
+  if (error) { showStatus('Save failed: ' + error.message); return; }
+  showStatus('Saved');
+  document.getElementById('editForm').style.display = 'none';
+  await fetchFeaturedRows();
+  if (category) openFeaturedCategory(category); else loadFeaturedDashboard();
+}
+
+async function submitGallery(id) {
+  const existing = id ? allGalleryRows.find(r => r.id === id) : null;
+  const name = document.getElementById('f_name').value.trim();
+  if (!name) { showStatus('Please type the project name.'); return; }
+  const category = readCategoryField(allGalleryRows);
+  const image_url = await pickImageUrl(existing?.image_url);
+  if (image_url === null) return;
+  const row = {
+    project_name: name,
+    description: document.getElementById('f_description').value.trim(),
+    category,
     image_url,
   };
   const { error } = id ? await sb.from('Gallery').update(row).eq('id', id) : await sb.from('Gallery').insert(row);
   if (error) { showStatus('Save failed: ' + error.message); return; }
   showStatus('Saved');
   document.getElementById('editForm').style.display = 'none';
-  loadGalleryDashboard(); // Our Work category view is being finished in a later session — this just prevents a crash for now.
+  await fetchGalleryRows();
+  if (category) openGalleryCategory(category); else loadGalleryDashboard();
 }
 
 async function submitTestimonial(id) {
