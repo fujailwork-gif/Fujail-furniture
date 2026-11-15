@@ -994,6 +994,16 @@ function openForm(type, item, presetCategory) {
       <div style="display:flex; gap:10px;">
         <button class="btn-primary" onclick="submitCatalog(${item?.id || 'null'})">Save</button>
         ${cancelBtn}
+      </div>
+      <div style="margin-top:22px; border-top:1px solid var(--line); padding-top:16px;">
+        <h3>Extra Photos</h3>
+        ${isEdit ? `
+        <p class="muted" style="margin-bottom:12px;">Extra photos show on this product's page as small pictures under the main photo. They are saved straight away — no need to press Save above.</p>
+        <div class="prod-grid" id="extraPhotosGrid"><p class="empty-note">Loading…</p></div>
+        <label style="margin-top:12px;">Add a photo</label>
+        <input id="f_extra_image" type="file" accept="image/*">
+        <button class="btn-secondary btn-small" id="extraAddBtn" onclick="addExtraPhoto(${item.id})">Upload Extra Photo</button>` : `
+        <p class="muted">First save this product. Then open it with Edit to add extra photos.</p>`}
       </div>`;
   }
 
@@ -1038,6 +1048,73 @@ function openForm(type, item, presetCategory) {
         ${cancelBtn}
       </div>`;
   }
+  if (type === 'catalog' && item && item.section === 'product') loadExtraPhotos(item.id, item.name);
+}
+
+// ---------- Extra photos for a Collections product (Product_Images table, linked by product id) ----------
+let extraPhotoRows = [];
+
+function extraPhotoFilter(productId, productName) {
+  const q = '"' + String(productName || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+  // Photos linked by id, plus any older photos that were linked only by name (product_id empty).
+  return `product_id.eq.${productId},and(product_id.is.null,product_name.eq.${q})`;
+}
+
+async function loadExtraPhotos(productId, productName) {
+  const grid = document.getElementById('extraPhotosGrid');
+  if (!grid) return;
+  const { data, error } = await sb.from('Product_Images').select('*')
+    .or(extraPhotoFilter(productId, productName))
+    .order('display_order', { ascending: true }).order('id', { ascending: true });
+  if (error) {
+    grid.innerHTML = `<p class="empty-note">Could not load extra photos: ${esc(error.message)}</p>`;
+    return;
+  }
+  extraPhotoRows = data || [];
+  grid.innerHTML = '';
+  if (!extraPhotoRows.length) { grid.innerHTML = '<p class="empty-note">No extra photos yet.</p>'; return; }
+  extraPhotoRows.forEach((row, idx) => {
+    const card = document.createElement('div');
+    card.className = 'prod-card';
+    card.innerHTML = `
+      ${row.image_url ? `<img src="${esc(row.image_url)}" alt="">` : `<div class="ph-fallback"></div>`}
+      <div class="pbody"><span class="step-badge">Photo ${idx + 1}</span></div>
+      <div class="pactions"><button class="btn-danger">Delete</button></div>`;
+    card.querySelector('button').addEventListener('click', () => deleteExtraPhoto(row.id, productId, productName));
+    grid.appendChild(card);
+  });
+}
+
+async function addExtraPhoto(productId) {
+  const product = allProductRows.find(r => r.id === productId);
+  const file = document.getElementById('f_extra_image').files[0];
+  if (!file) { showStatus('Please choose a photo first.'); return; }
+  const btn = document.getElementById('extraAddBtn');
+  btn.disabled = true;
+  showStatus('Uploading photo…');
+  let image_url;
+  try { image_url = await uploadImage(file); }
+  catch (e) { showStatus('Image upload failed: ' + e.message); btn.disabled = false; return; }
+  const nextOrder = extraPhotoRows.length ? Math.max(...extraPhotoRows.map(r => Number(r.display_order) || 0)) + 1 : 1;
+  const { error } = await sb.from('Product_Images').insert({
+    product_id: productId,
+    product_name: product ? product.name : null,
+    image_url,
+    display_order: nextOrder,
+  });
+  btn.disabled = false;
+  if (error) { showStatus('Save failed: ' + error.message); return; }
+  showStatus('Photo added');
+  document.getElementById('f_extra_image').value = '';
+  await loadExtraPhotos(productId, product ? product.name : '');
+}
+
+async function deleteExtraPhoto(id, productId, productName) {
+  if (!confirm('Delete this extra photo? This cannot be undone.')) return;
+  const { error } = await sb.from('Product_Images').delete().eq('id', id);
+  if (error) { showStatus('Error deleting: ' + error.message); return; }
+  showStatus('Photo deleted');
+  await loadExtraPhotos(productId, productName);
 }
 
 // Uploads the chosen photo (if any); otherwise keeps the existing one. Returns null if the upload failed.
