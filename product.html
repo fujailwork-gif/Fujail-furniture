@@ -93,6 +93,7 @@ async function fetchTable(table, query) {
 }
 
 const params = new URLSearchParams(window.location.search);
+const productId = params.get('id') || '';
 const productName = params.get('name') || '';
 const main = document.getElementById('mainContent');
 
@@ -107,15 +108,19 @@ function imageBlock(src, label, index) {
 }
 
 async function loadProduct() {
-  if (!productName) { renderNotFound(); return; }
-
-  const products = await fetchTable('Product', `select=*&name=eq.${encodeURIComponent(productName)}&limit=1`);
+  // Open by id (safe even when two products share a name). Old links that use ?name= still work.
+  let products = [];
+  if (/^\d+$/.test(productId)) {
+    products = await fetchTable('Product', `select=*&id=eq.${productId}&limit=1`);
+  } else if (productName) {
+    products = await fetchTable('Product', `select=*&name=eq.${encodeURIComponent(productName)}&limit=1`);
+  }
   if (!products.length) { renderNotFound(); return; }
   const product = products[0];
 
   const extraImages = await fetchTable(
     'Product_Images',
-    `select=*&product_name=eq.${encodeURIComponent(productName)}&order=display_order.asc.nullslast`
+    `select=*&product_name=eq.${encodeURIComponent(product.name)}&order=display_order.asc.nullslast`
   );
 
   // Build the full image list: main product photo first, then any extra photos
