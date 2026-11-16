@@ -22,8 +22,9 @@
   @media (prefers-color-scheme: dark){
     :root:not([data-theme="light"]){
       --ivory:#1b1712; --paper:#221d17; --charcoal:#f3ede2; --charcoal-soft:#cfc4b3;
-      --line:#3a3226; --accent:#c79b6f;
+      --line:#3a3226; --accent:#c79b6f; --wood-deep:#c79b6f;
     }
+    :root:not([data-theme="light"]) header{background:rgba(27,23,18,.88);}
   }
   *{box-sizing:border-box; margin:0; padding:0;}
   html{scroll-behavior:smooth; scroll-padding-top: calc(76px + env(safe-area-inset-top,0px)); height:100%;}
@@ -54,11 +55,10 @@
   /* Header */
   header{position:sticky; top:0; z-index:50; background:rgba(247,243,236,.86); backdrop-filter:blur(10px); border-bottom:1px solid var(--line); padding-top:env(safe-area-inset-top,0px);}
   .nav{display:flex; align-items:center; justify-content:space-between; height:76px;}
-  .brand{font-family:'Fraunces',serif; font-size:1.25rem; letter-spacing:.04em;}
+  .brand{font-family:'Fraunces',serif; font-size:1.25rem; letter-spacing:.04em; white-space:nowrap;}
   .brand b{color:var(--wood-deep); font-weight:600;}
-  .nav-links{display:none; gap:32px; font-size:.9rem; font-weight:500;}
-  .nav-links a{opacity:.8; transition:opacity .2s; margin-left:32px;}
-  .nav-links a:first-child{margin-left:0;}
+  .nav-links{display:none; gap:28px; font-size:.9rem; font-weight:500; white-space:nowrap;}
+  .nav-links a{opacity:.8; transition:opacity .2s;}
   .nav-links a:hover{opacity:1;}
   .cta-btn{background:var(--charcoal); color:var(--paper); padding:11px 22px; border-radius:2px; font-size:.85rem; font-weight:600; letter-spacing:.02em; border:none; transition:transform .25s ease, background .25s;}
   .cta-btn:hover{background:var(--wood-deep);}
@@ -68,7 +68,7 @@
   .mobile-menu{display:none; flex-direction:column; gap:2px; background:var(--paper); border-bottom:1px solid var(--line);}
   .mobile-menu.open{display:flex;}
   .mobile-menu a{padding:16px 24px; border-top:1px solid var(--line); font-size:.95rem;}
-  @media(min-width:860px){ .nav-links{display:flex; align-items:center;} .burger{display:none;} .mobile-menu{display:none !important;} }
+  @media(min-width:1024px){ .nav-links{display:flex; align-items:center;} .burger{display:none;} .mobile-menu{display:none !important;} }
 
   /* reveal animation */
   .reveal{opacity:1; transform:none;}
@@ -87,6 +87,7 @@
   .hero .cta-btn.ghost{background:transparent; color:#fff; border:1px solid rgba(255,255,255,.7);}
 
   section{padding:88px 0;}
+  section.wrap{padding-top:clamp(56px,8vw,88px); padding-bottom:clamp(56px,8vw,88px);}
   .section-head{max-width:640px; margin-bottom:48px;}
   .section-head h2{font-size:clamp(1.7rem,3.6vw,2.4rem); margin-top:10px;}
   .section-head p{margin-top:14px; color:var(--charcoal-soft); font-size:1.02rem;}
@@ -142,7 +143,7 @@
   .testi-note{font-size:.78rem; color:var(--charcoal-soft); margin-top:36px; text-align:center;}
 
   /* Final CTA */
-  .final-cta{background:var(--charcoal); color:var(--ivory); border-radius:4px; padding:64px 28px; text-align:center;}
+  .final-cta{background:#26221d; color:#f7f3ec; border-radius:4px; padding:64px 28px; text-align:center;}
   .final-cta h2{color:#fff; font-size:clamp(1.7rem,4vw,2.5rem); max-width:16ch; margin:0 auto;}
   .final-cta .hero-ctas{justify-content:center; margin-top:30px;}
 
@@ -157,9 +158,10 @@
   .field.invalid .field-error{display:block;}
   .form-note{font-size:.8rem; color:var(--charcoal-soft); margin-top:4px;}
   #formStatus{display:none; padding:14px 16px; border-radius:3px; font-size:.9rem; margin-top:16px;}
+  #formStatus.err{display:block; background:#fbeeea; color:#8a2f1c; border:1px solid #efc9c0;}
   #formStatus.ok{display:block; background:#eef4ea; color:#3c5a2f; border:1px solid #cfe0c4;}
 
-  footer{background:var(--charcoal); color:var(--ivory); padding:64px 0 32px;}
+  footer{background:#26221d; color:#f7f3ec; padding:64px 0 32px;}
   footer .wrap{display:grid; gap:36px; grid-template-columns:1fr;}
   @media(min-width:760px){ footer .wrap{grid-template-columns:1.4fr 1fr 1fr 1fr;} }
   footer h4{font-size:.82rem; letter-spacing:.1em; text-transform:uppercase; color:#c9bfa9; margin-bottom:14px;}
@@ -326,8 +328,9 @@
       <h2 class="serif">Tell us about your project.</h2>
       <p>Share a few details and we'll get back to you.</p>
     </div>
-    <iframe name="hidden_iframe" id="hiddenIframe" style="display:none;" title="form submission target"></iframe>
-    <form id="quoteForm" novalidate class="reveal" aria-describedby="formStatus" action="https://formspree.io/f/xdekpwgg" method="POST" target="hidden_iframe">
+    <form id="quoteForm" novalidate class="reveal" aria-describedby="formStatus" action="https://formspree.io/f/xdekpwgg" method="POST">
+      <input type="hidden" name="_subject" value="New enquiry — Fujail Furniture">
+      <input type="text" name="_gotcha" style="display:none" tabindex="-1" autocomplete="off" aria-hidden="true">
       <div class="field full">
         <label for="name">Name *</label>
         <input id="name" name="name" type="text" required autocomplete="name">
@@ -370,9 +373,8 @@
         <textarea id="message" name="message" rows="4" placeholder="Tell us about your space and what you have in mind"></textarea>
       </div>
       <div class="field full">
-        <label for="refImage">Upload Reference Image</label>
-        <input id="refImage" name="refImage" type="file" accept="image/*">
-        <p class="form-note">Optional — attach a photo or inspiration image.</p>
+        <label>Reference Photo</label>
+        <p class="form-note">Have a photo or inspiration image? After you submit, send it to us on <a id="formWhatsapp" href="https://wa.me/918087278169" target="_blank" rel="noopener" style="color:var(--wood-deep); font-weight:600;">WhatsApp</a> and we'll add it to your enquiry.</p>
       </div>
       <div class="full">
         <button type="submit" class="cta-btn">Submit Enquiry</button>
@@ -441,22 +443,33 @@ if (!reduceMotion && 'IntersectionObserver' in window) {
   });
 }
 
+function esc(v) {
+  return String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function cssUrl(u) { return 'url("' + String(u).replace(/"/g, '%22') + '")'; }
+
 // Card factory to avoid duplicated markup
 function makeCard(title, desc, tag, imgSrc, link) {
   const el = document.createElement(link ? 'a' : 'div');
   el.className = 'card reveal';
   if (link) { el.href = link; }
   const media = imgSrc
-    ? `<div class="ph" style="background-image:url('${imgSrc}'); background-size:cover; background-position:center;" role="img" aria-label="${title}"></div>`
-    : `<div class="ph" aria-hidden="true"><span>Placeholder — ${title} image</span></div>`;
+    ? `<div class="ph" role="img" aria-label="${esc(title)}"></div>`
+    : `<div class="ph" aria-hidden="true"><span>Placeholder — ${esc(title)} image</span></div>`;
   el.innerHTML = `
     ${media}
     <div class="card-body">
-      <h3>${title}</h3>
-      <p>${desc}</p>
-      ${tag ? `<span class="price-tag">${tag}</span>` : ''}
+      <h3>${esc(title)}</h3>
+      <p>${esc(desc)}</p>
+      ${tag ? `<span class="price-tag">${esc(tag)}</span>` : ''}
       <div class="card-link">Explore <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
     </div>`;
+  if (imgSrc) {
+    const ph = el.querySelector('.ph');
+    ph.style.backgroundImage = cssUrl(imgSrc);
+    ph.style.backgroundSize = 'cover';
+    ph.style.backgroundPosition = 'center';
+  }
   return el;
 }
 
@@ -552,7 +565,7 @@ async function loadTestimonials() {
     const el = document.createElement('div');
     el.className = 'testi';
     const who = i.project_type ? `${i.customer_name}, ${i.project_type}` : i.customer_name;
-    el.innerHTML = `<p>"${i.review_text}"</p><p class="who">— ${who}</p>`;
+    el.innerHTML = `<p>"${esc(i.review_text)}"</p><p class="who">— ${esc(who)}</p>`;
     grid.appendChild(el);
   });
   if (anyPlaceholder) note.style.display = 'block';
@@ -568,6 +581,8 @@ async function loadFooterSettings() {
     const digits = settings.whatsapp.replace(/[^0-9]/g, '');
     el.href = `https://wa.me/${digits}`;
     el.textContent = `WhatsApp — ${settings.whatsapp}`;
+    const fw = document.getElementById('formWhatsapp');
+    if (fw) fw.href = `https://wa.me/${digits}`;
   }
   if (settings.email) {
     const el = document.getElementById('footerEmail');
@@ -605,7 +620,7 @@ async function loadPageContent() {
   const setImage = (id, url, label) => {
     if (!url) return;
     const el = document.getElementById(id);
-    el.style.backgroundImage = `url('${url}')`;
+    el.style.backgroundImage = cssUrl(url);
     el.style.backgroundSize = 'cover';
     el.style.backgroundPosition = 'center';
     el.innerHTML = '';
@@ -641,7 +656,7 @@ async function loadPageContent() {
         ? ''
         : `<span>${s.heading}</span>`;
       if (s.image_url) {
-        el.style.backgroundImage = `url('${s.image_url}')`;
+        el.style.backgroundImage = cssUrl(s.image_url);
         el.style.backgroundSize = 'cover';
         el.style.backgroundPosition = 'center';
       }
@@ -657,29 +672,19 @@ loadTestimonials();
 loadFooterSettings();
 loadPageContent();
 
-// Form validation + real submission via Formspree.
-// Submits as a native browser form POST (targeted at a hidden iframe) rather than
-// a JS fetch() call, since a published artifact page's network policy only allows
-// fetch to a small set of hosts — a plain form submission is a real navigation,
-// not a fetch, so it isn't subject to that restriction and works reliably here.
+// Form validation + real submission via Formspree (fetch, so we can tell whether it really worked).
 const form = document.getElementById('quoteForm');
 const status = document.getElementById('formStatus');
-const hiddenIframe = document.getElementById('hiddenIframe');
 const submitBtn = form.querySelector('button[type="submit"]');
-let submitting = false;
 
-hiddenIframe.addEventListener('load', () => {
-  if (!submitting) return;
-  submitting = false;
-  submitBtn.disabled = false;
-  submitBtn.textContent = 'Submit Enquiry';
-  status.className = 'ok';
-  status.textContent = "Thanks — your enquiry has been sent. We'll get back to you shortly.";
+function showFormStatus(kind, text) {
+  status.className = kind;
+  status.textContent = text;
   status.style.display = 'block';
-  form.reset();
-});
+}
 
-form.addEventListener('submit', (e) => {
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
   let valid = true;
   form.querySelectorAll('[required]').forEach(input => {
     const field = input.closest('.field');
@@ -689,11 +694,29 @@ form.addEventListener('submit', (e) => {
     field.classList.toggle('invalid', !ok);
     if (!ok) valid = false;
   });
-  if (!valid) { e.preventDefault(); status.className=''; status.style.display='none'; return; }
-  // Valid: let the native submission proceed to the hidden iframe.
-  submitting = true;
+  if (!valid) { status.className=''; status.style.display='none'; return; }
+
   submitBtn.disabled = true;
   submitBtn.textContent = 'Sending…';
+  status.className=''; status.style.display='none';
+  try {
+    const res = await fetch(form.action, {
+      method: 'POST',
+      body: new FormData(form),
+      headers: { Accept: 'application/json' },
+    });
+    if (res.ok) {
+      showFormStatus('ok', "Thanks — your enquiry has been sent. We'll get back to you shortly.");
+      form.reset();
+    } else {
+      showFormStatus('err', 'Sorry, your enquiry could not be sent. Please try again, or message us on WhatsApp.');
+    }
+  } catch (err) {
+    showFormStatus('err', 'Sorry, your enquiry could not be sent. Please check your internet and try again, or message us on WhatsApp.');
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Submit Enquiry';
+  }
 });
 </script>
 </body>
