@@ -373,7 +373,29 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 });
 
 // ---------- Image upload helper ----------
-async function uploadImage(file) {
+// Big phone photos make the website slow. Shrink them (max 1600px wide/high) before uploading.
+// If anything goes wrong, the original photo is uploaded as it is.
+async function shrinkImage(file) {
+  try {
+    if (!file.type.startsWith('image/') || /gif|svg/.test(file.type)) return file;
+    const bmp = await createImageBitmap(file);
+    const scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+    if (scale === 1 && file.size < 400 * 1024) return file;
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(bmp.width * scale);
+    canvas.height = Math.round(bmp.height * scale);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.85));
+    if (!blob || blob.size >= file.size) return file;
+    return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
+  } catch (e) { return file; }
+}
+
+async function uploadImage(originalFile) {
+  const file = await shrinkImage(originalFile);
   const ext = file.name.split('.').pop();
   const path = `${Date.now()}_${Math.random().toString(36).slice(2,8)}.${ext}`;
   const { error } = await sb.storage.from(BUCKET).upload(path, file);
