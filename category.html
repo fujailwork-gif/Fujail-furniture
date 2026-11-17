@@ -91,13 +91,13 @@
     <div class="empty-state" id="productsEmpty" style="display:none;">No products added in this category yet. Check back soon, or <a href="index.html#contact" style="color:var(--wood-deep); font-weight:600;">get in touch</a> for a custom piece.</div>
   </section>
 
-  <section class="wrap">
+  <!-- Hidden until this category has at least one completed project -->
+  <section class="wrap" id="workSection" style="display:none;">
     <div class="section-head">
       <p class="eyebrow">Our Work</p>
       <h2 class="serif">Completed Projects</h2>
     </div>
     <div class="grid" id="workGrid"></div>
-    <div class="empty-state" id="workEmpty" style="display:none;">No completed projects in this category yet.</div>
   </section>
 
   <section class="wrap" style="text-align:center; padding-bottom:72px;">
@@ -209,15 +209,15 @@ async function loadProducts() {
 
 async function loadWork() {
   const grid = document.getElementById('workGrid');
-  const emptyEl = document.getElementById('workEmpty');
   const items = await fetchTable(
     'Gallery',
-    `select=*&category=ilike.${encodeURIComponent(categoryName.trim())}`,
+    `select=*&category=ilike.${encodeURIComponent(categoryName.trim())}&order=id.asc`,
     null
   );
-  if (items === null) { showLoadError(emptyEl); return; }
-  if (!items.length) { emptyEl.style.display = 'block'; return; }
-  items.forEach(i => grid.appendChild(makeCard(i.project_name, i.description, null, i.image_url || null, i.image_url || null, true)));
+  // Nothing to show (or could not load): keep this whole section hidden.
+  if (!items || !items.length) return;
+  items.forEach(i => grid.appendChild(makeCard(i.project_name, i.description, null, i.image_url || null, `work-project.html?id=${encodeURIComponent(i.id)}`)));
+  document.getElementById('workSection').style.display = '';
 }
 
 if (categoryName) {
@@ -225,7 +225,6 @@ if (categoryName) {
   loadWork();
 } else {
   document.getElementById('productsEmpty').style.display = 'block';
-  document.getElementById('workEmpty').style.display = 'block';
 }
 </script>
 </body>
